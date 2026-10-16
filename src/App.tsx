@@ -59,6 +59,53 @@ export default function App() {
     },
   ]);
 
+  // Synchronize with Go engine backend if running
+  useEffect(() => {
+    let mounted = true;
+    const fetchBackendState = async () => {
+      try {
+        const statusRes = await fetch('/api/status');
+        if (statusRes.ok && mounted) {
+          const status = await statusRes.json();
+          if (Array.isArray(status.categories) && status.categories.length > 0) {
+            setCategories(status.categories);
+          }
+          if (Array.isArray(status.rules) && status.rules.length > 0) {
+            setRules(status.rules);
+          }
+        }
+        const txRes = await fetch('/api/transactions');
+        if (txRes.ok && mounted) {
+          const txList = await txRes.json();
+          if (Array.isArray(txList) && txList.length > 0) {
+            // Map Go backend transaction field names to frontend TypeScript schema
+            const mapped: Transaction[] = txList.map((t: any) => ({
+              id: t.id,
+              accountId: t.account_id || '',
+              accountMasked: t.account_masked || '****0000',
+              transactionDate: t.transaction_date || '',
+              amountCents: t.amount_cents || 0,
+              rawPayee: t.raw_payee || '',
+              cleanPayee: t.clean_payee || t.raw_payee || '',
+              category: t.category || 'Uncategorized',
+              confidenceScore: typeof t.confidence_score === 'number' ? t.confidence_score : 1.0,
+              needsReview: !!t.needs_review,
+              categorizationTier: t.categorization_tier || 'regex',
+              userVerified: !!t.user_verified,
+              sourceFileHash: t.source_file_hash || '',
+              importedAt: t.imported_at || new Date().toISOString(),
+            }));
+            setTransactions(mapped);
+          }
+        }
+      } catch {
+        // Backend not running in preview; cleanly fallback to local seed data
+      }
+    };
+    fetchBackendState();
+    return () => { mounted = false; };
+  }, []);
+
   // Modal State for Rule Generation
   const [ruleModalState, setRuleModalState] = useState<{
     isOpen: boolean;
@@ -217,6 +264,17 @@ export default function App() {
 
     setLastIngestResult(result);
 
+    // Sync with backend /api/upload if available
+    try {
+      fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'X-Filename': filename },
+        body: rawText,
+      }).catch(() => {});
+    } catch {
+      // offline preview mode
+    }
+
     // Switch to triage if new items were flagged
     if (flagged > 0 && activeTab !== 'triage') {
       setActiveTab('triage');
@@ -251,6 +309,17 @@ export default function App() {
         [normKey]: { category, cleanPayee },
       }));
     }
+
+    // Sync with backend if available
+    try {
+      fetch('/api/transactions/categorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, category, clean_payee: cleanPayee }),
+      }).catch(() => {});
+    } catch {
+      // offline
+    }
   };
 
   // Inline Category Update from Ledger table
@@ -276,6 +345,17 @@ export default function App() {
         ...prev,
         [normKey]: { category: newCategory, cleanPayee: targetTx.cleanPayee },
       }));
+    }
+
+    // Sync with backend if available
+    try {
+      fetch('/api/transactions/categorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, category: newCategory, clean_payee: targetTx?.cleanPayee || '' }),
+      }).catch(() => {});
+    } catch {
+      // offline
     }
   };
 
@@ -363,6 +443,22 @@ export default function App() {
 
     // Prepend rule so newly created rules have highest priority
     setRules(prev => [newRule, ...prev]);
+
+    // Sync with Go backend if available
+    try {
+      fetch('/api/rules/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pattern,
+          category,
+          clean_payee: cleanPayee.trim(),
+          apply_historical: applyHistorical,
+        }),
+      }).catch(() => {});
+    } catch {
+      // offline
+    }
 
     if (applyHistorical) {
       let p = pattern;

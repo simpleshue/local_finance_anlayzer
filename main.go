@@ -17,11 +17,13 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -35,6 +37,9 @@ import (
 	"syscall"
 	"time"
 )
+
+//go:embed all:dist
+var distFS embed.FS
 
 // ============================================================================
 // 1. DEFENSE-IN-DEPTH RUNTIME ISOLATION & MEMORY HYGIENE
@@ -1617,32 +1622,115 @@ const embeddedIndexHTML = `<!DOCTYPE html>
 <header>
   <div class="brand">
     <span>ZERO-LEAK LOCAL FINANCE ENGINE</span>
-    <span class="shield-badge">AIR-GAP LOCK: 127.0.0.1 ONLY</span>
-    <span class="shield-badge">AES-256-GCM LEDGER</span>
+    <span class="shield-badge">AIR-GAP ACTIVE</span>
+    <span class="shield-badge">AES-256-GCM</span>
   </div>
-  <div>
-    <button class="btn" id="policyBtn" onclick="togglePolicy()">Policy: Loading...</button>
+
+  <div class="tabs">
+    <button class="tab-btn active" id="tabReviewBtn" onclick="switchTab('review')">
+      Flagged Triage <span class="badge-count" id="tabReviewBadge">0</span>
+    </button>
+    <button class="tab-btn" id="tabAllBtn" onclick="switchTab('all')">
+      Encrypted Ledger
+    </button>
+    <button class="tab-btn" id="tabRulesBtn" onclick="switchTab('rules')">
+      RE2 Regex Rules
+    </button>
+    <button class="tab-btn" id="tabSecurityBtn" onclick="switchTab('security')">
+      Security Auditor
+    </button>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:10px;">
+    <button class="btn btn-primary" onclick="openIngestModal()">+ Ingest Statement</button>
+    <button class="btn btn-indigo" onclick="openCategoryModal()">Categories</button>
+    <span class="shield-badge" style="background:var(--emerald-bg);color:var(--emerald);" id="policyBadge">defer clear(rawBytes)</span>
   </div>
 </header>
 
-<div class="container">
-  <!-- View 0: Direct Statement Upload & Summary -->
-  <div class="top-grid">
-    <div class="card">
-      <div class="card-title">
-        <span>Direct OFX / QFX Statement Ingestion (RAM-Only Buffer)</span>
-        <span class="mono" style="font-size:0.75rem;color:var(--emerald);">defer clear(rawBytes)</span>
+<div class="container" style="display:grid;grid-template-columns:minmax(0, 3fr) 340px;gap:20px;max-width:1750px;margin:20px auto;padding:0 20px;">
+  <!-- Left Main Column -->
+  <div style="min-width:0;">
+    <!-- View 1: Transactions Table -->
+    <div id="viewTransactions" class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
+        <div id="viewSubtitle" style="font-size:0.88rem;color:var(--muted);">
+          Showing ambiguous or low-confidence (<85%) transactions requiring human verification.
+        </div>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="searchInput" placeholder="Filter payee or category..." oninput="loadTransactions()" style="width:240px;">
+          <button class="btn" id="batchApproveBtn" onclick="batchApproveAll()" style="display:none;">Approve All</button>
+        </div>
       </div>
-      <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
-        <input type="file" id="fileInput" accept=".ofx,.qfx" style="display:none" onchange="handleFiles(this.files)">
-        <div style="font-weight:600;margin-bottom:4px;">Drag & Drop .OFX or .QFX Statement Here</div>
-        <div style="font-size:0.82rem;color:var(--muted);">Parsed strictly in volatile memory (10 MB cap) — Never touches /tmp on disk</div>
-        <div id="uploadResult" class="mono" style="margin-top:10px;font-size:0.8rem;color:var(--emerald);"></div>
+
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Account</th>
+              <th>Raw Statement String & Cleaned Merchant</th>
+              <th>Amount</th>
+              <th>Tier / Confidence</th>
+              <th>Category Override</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="txTableBody"></tbody>
+        </table>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">Ledger Security & Triage Telemetry</div>
+    <!-- View 2: Rules List -->
+    <div id="viewRules" class="card" style="display:none;">
+      <div class="card-title">
+        <span>Deterministic Go RE2 Regex Rules (Linear-Time O(N) Execution)</span>
+        <button class="btn btn-indigo" onclick="openRuleModal('', '')">+ New Regex Rule</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Regex Pattern</th>
+            <th>Target Category</th>
+            <th>Clean Merchant Override</th>
+          </tr>
+        </thead>
+        <tbody id="rulesTableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- View 3: Security Auditor -->
+    <div id="viewSecurity" class="card" style="display:none;">
+      <div class="card-title">
+        <span>Zero-Leak Security Architecture & Auditor</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+        <div style="background:var(--panel-alt);border:1px solid var(--border);border-radius:10px;padding:16px;">
+          <div style="font-weight:700;color:var(--emerald);margin-bottom:8px;font-size:0.9rem;">🔒 Air-Gap Invariant</div>
+          <div style="font-size:0.82rem;color:var(--muted);line-height:1.6;">
+            Outbound DNS, TLS, and TCP dialers are trapped and prohibited at runtime. The Go runtime dialer strictly restricts network access to local loopback (127.0.0.1 / ::1 / 0.0.0.0 for LAN).
+          </div>
+        </div>
+        <div style="background:var(--panel-alt);border:1px solid var(--border);border-radius:10px;padding:16px;">
+          <div style="font-weight:700;color:var(--emerald);margin-bottom:8px;font-size:0.9rem;">🧹 RAM Zeroization</div>
+          <div style="font-size:0.82rem;color:var(--muted);line-height:1.6;">
+            Statement payloads are parsed entirely in volatile memory. Account numbers are masked via HMAC-SHA256, and raw buffers are immediately wiped via <code class="mono" style="color:var(--emerald);">defer clear(rawBytes)</code>.
+          </div>
+        </div>
+      </div>
+      <div style="background:var(--panel-alt);border:1px solid var(--border);border-radius:10px;padding:16px;">
+        <div style="font-weight:700;color:var(--indigo);margin-bottom:8px;font-size:0.9rem;">🔐 PBKDF2-HMAC-SHA256 & AES-256-GCM Ledger</div>
+        <div style="font-size:0.82rem;color:var(--muted);line-height:1.6;">
+          Ledger records are encrypted with AES-256-GCM with a 256-bit symmetric key derived via 600,000 PBKDF2 iterations using your master <code class="mono">FINANCE_PASSPHRASE</code>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Sidebar Column: Telemetry & Spend Breakdown -->
+  <div>
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-title">Ledger Telemetry</div>
       <div class="stats-grid">
         <div class="stat-box">
           <div class="stat-label">Needs Review</div>
@@ -1656,71 +1744,61 @@ const embeddedIndexHTML = `<!DOCTYPE html>
           <div class="stat-label">Total Records</div>
           <div class="stat-value" id="statTotal">0</div>
         </div>
+        <div class="stat-box">
+          <div class="stat-label">Total Inflow</div>
+          <div class="stat-value" id="statInflow" style="color:var(--emerald);">$0.00</div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Navigation Tabs -->
-  <div class="tabs">
-    <button class="tab-btn active" id="tabReviewBtn" onclick="switchTab('review')">
-      1. Flagged Triage Inbox <span class="badge-count" id="tabReviewBadge">0</span>
-    </button>
-    <button class="tab-btn" id="tabAllBtn" onclick="switchTab('all')">
-      2. Full Encrypted Ledger & Spend Breakdown
-    </button>
-    <button class="tab-btn" id="tabRulesBtn" onclick="switchTab('rules')">
-      3. Deterministic RE2 Regex Rules
-    </button>
-  </div>
-
-  <!-- View 1 & 3: Transactions Table + Spend Breakdown -->
-  <div id="viewTransactions" class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
-      <div id="viewSubtitle" style="font-size:0.9rem;color:var(--muted);">
-        Showing ambiguous or low-confidence (<85%) transactions requiring human verification.
-      </div>
-      <input type="text" id="searchInput" placeholder="Filter payee or category..." oninput="loadTransactions()" style="width:260px;">
-    </div>
-
-    <div id="breakdownPanel" style="display:none;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--border);">
-      <div class="card-title">Category Spend Breakdown (Client-Side Computed)</div>
+    <div class="card" id="breakdownPanel">
+      <div class="card-title">Category Spend Breakdown</div>
       <div id="barsContainer"></div>
     </div>
+  </div>
+</div>
 
-    <div style="overflow-x:auto;">
-      <table>
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Account</th>
-            <th>Raw Statement String & Cleaned Merchant</th>
-            <th>Amount</th>
-            <th>Tier / Confidence</th>
-            <th>Category Override</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="txTableBody"></tbody>
-      </table>
+<!-- Modal 1: Ingest Statement Modal -->
+<div class="modal-backdrop" id="ingestModal">
+  <div class="modal">
+    <div class="card-title">
+      <span>Ingest OFX / QFX Statement</span>
+      <button class="btn" onclick="closeIngestModal()">✕</button>
+    </div>
+    <div style="font-size:0.82rem;color:var(--muted);margin-bottom:14px;">
+      Parsed strictly in volatile RAM (10 MB cap). Zero disk persistence of plaintext statements.
+    </div>
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+      <input type="file" id="fileInput" accept=".ofx,.qfx" style="display:none" onchange="handleFiles(this.files)">
+      <div style="font-weight:700;font-size:1rem;margin-bottom:6px;">Drag & Drop .OFX or .QFX Statement Here</div>
+      <div style="font-size:0.8rem;color:var(--muted);">or click to select file from your computer</div>
+      <div id="uploadResult" class="mono" style="margin-top:14px;font-size:0.82rem;color:var(--emerald);font-weight:600;"></div>
+    </div>
+    <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;">
+      <button class="btn" onclick="loadSampleStatement()">Quick Test with Sample Statement</button>
+      <button class="btn" onclick="closeIngestModal()">Done</button>
     </div>
   </div>
+</div>
 
-  <!-- View 2: Rules List -->
-  <div id="viewRules" class="card" style="display:none;">
+<!-- Modal 2: Categories Modal -->
+<div class="modal-backdrop" id="categoryModal">
+  <div class="modal">
     <div class="card-title">
-      <span>Compiled Go RE2 Regex Rules (Linear-Time O(N) Execution)</span>
-      <button class="btn btn-indigo" onclick="openRuleModal('', '')">+ New Regex Rule</button>
+      <span>Category Manager</span>
+      <button class="btn" onclick="closeCategoryModal()">✕</button>
     </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Regex Pattern</th>
-          <th>Target Category</th>
-          <th>Clean Merchant Override</th>
-        </tr>
-      </thead>
-      <tbody id="rulesTableBody"></tbody>
-    </table>
+    <div style="font-size:0.82rem;color:var(--muted);margin-bottom:14px;">
+      Loaded dynamically from <code class="mono">config/categories.json</code>.
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <input type="text" id="newCatInput" placeholder="New category name (e.g. Health:Fitness)...">
+      <button class="btn btn-primary" onclick="addNewCategory()">+ Add</button>
+    </div>
+    <div id="catChipsContainer" style="display:flex;flex-wrap:wrap;gap:8px;max-height:260px;overflow-y:auto;padding:8px 0;"></div>
+    <div style="margin-top:16px;text-align:right;">
+      <button class="btn" onclick="closeCategoryModal()">Close</button>
+    </div>
   </div>
 </div>
 
@@ -1882,17 +1960,74 @@ function switchTab(tab) {
   document.getElementById('tabReviewBtn').classList.toggle('active', tab === 'review');
   document.getElementById('tabAllBtn').classList.toggle('active', tab === 'all');
   document.getElementById('tabRulesBtn').classList.toggle('active', tab === 'rules');
+  document.getElementById('tabSecurityBtn').classList.toggle('active', tab === 'security');
 
-  document.getElementById('viewTransactions').style.display = (tab === 'rules') ? 'none' : 'block';
+  document.getElementById('viewTransactions').style.display = (tab === 'review' || tab === 'all') ? 'block' : 'none';
   document.getElementById('viewRules').style.display = (tab === 'rules') ? 'block' : 'none';
-  document.getElementById('breakdownPanel').style.display = (tab === 'all') ? 'block' : 'none';
+  document.getElementById('viewSecurity').style.display = (tab === 'security') ? 'block' : 'none';
 
   if (tab === 'review') {
     document.getElementById('viewSubtitle').textContent = 'Showing ambiguous or low-confidence (<85%) transactions requiring human verification.';
   } else if (tab === 'all') {
     document.getElementById('viewSubtitle').textContent = 'Showing all deduplicated transactions stored in the encrypted ledger.';
   }
-  loadTransactions();
+  if (tab === 'review' || tab === 'all') {
+    loadTransactions();
+  }
+}
+
+function openIngestModal() {
+  document.getElementById('uploadResult').textContent = '';
+  document.getElementById('ingestModal').classList.add('open');
+}
+function closeIngestModal() {
+  document.getElementById('ingestModal').classList.remove('open');
+}
+
+function openCategoryModal() {
+  renderCategoryChips();
+  document.getElementById('categoryModal').classList.add('open');
+}
+function closeCategoryModal() {
+  document.getElementById('categoryModal').classList.remove('open');
+}
+
+function addNewCategory() {
+  const input = document.getElementById('newCatInput');
+  const val = (input.value || '').trim();
+  if (val && !availableCategories.includes(val)) {
+    availableCategories.push(val);
+    input.value = '';
+    renderCategoryChips();
+  }
+}
+
+async function batchApproveAll() {
+  const res = await fetch('/api/transactions?needs_review=true');
+  const txs = await res.json();
+  for (const tx of txs) {
+    await fetch('/api/transactions/categorize', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ id: tx.id, category: tx.category, clean_payee: tx.clean_payee })
+    });
+  }
+  await refreshAll();
+}
+
+async function loadSampleStatement() {
+  const sampleOFX = `OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\nSECURITY:NONE\nENCODING:USASCII\nCHARSET:1252\nCOMPRESSION:NONE\nOLDFILEUID:NONE\nNEWFILEUID:NONE\n<OFX>\n<CREDITCARDMSGSRSV1>\n<CCSTMTRS>\n<CURDEF>USD\n<CCACCTFROM>\n<ACCTID>4111222233339482\n</CCACCTFROM>\n<BANKTRANLIST>\n<DTSTART>20261001000000\n<DTEND>20261015000000\n<STMTTRN>\n<TRNTYPE>DEBIT\n<DTPOSTED>20261014120000\n<TRNAMT>-142.80\n<FITID>CHASE_SAMPLE_001\n<NAME>TRADER JOE #542 SF\n</STMTTRN>\n<STMTTRN>\n<TRNTYPE>DEBIT\n<DTPOSTED>20261013143000\n<TRNAMT>-68.40\n<FITID>CHASE_SAMPLE_002\n<NAME>CHEVRON 0092421\n</STMTTRN>\n<STMTTRN>\n<TRNTYPE>DEBIT\n<DTPOSTED>20261012191500\n<TRNAMT>-52.00\n<FITID>CHASE_SAMPLE_003\n<NAME>TST* BLUE BOTTLE COFFEE\n</STMTTRN>\n</BANKTRANLIST>\n</CCSTMTRS>\n</CREDITCARDMSGSRSV1>\n</OFX>`;
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    headers: { 'X-Filename': 'chase_sample.ofx' },
+    body: sampleOFX
+  });
+  const data = await res.json();
+  if (res.ok) {
+    document.getElementById('uploadResult').textContent =
+      'Sample ingested: ' + data.inserted + ' new transactions added!';
+    await refreshAll();
+  }
 }
 
 // Drag & Drop OFX/QFX Upload
@@ -2120,14 +2255,44 @@ func main() {
 
 	// Step 3: Register local REST routes and embedded UI handler
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", withAirGapCSP(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
+
+	distSubFS, distErr := fs.Sub(distFS, "dist")
+	hasDist := distErr == nil
+	if hasDist {
+		if testF, testErr := distSubFS.Open("index.html"); testErr == nil {
+			_ = testF.Close()
+		} else {
+			hasDist = false
 		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = io.WriteString(w, embeddedIndexHTML)
-	}))
+	}
+
+	if hasDist {
+		fileServer := http.FileServer(http.FS(distSubFS))
+		mux.HandleFunc("/", withAirGapCSP(func(w http.ResponseWriter, r *http.Request) {
+			path := strings.TrimPrefix(r.URL.Path, "/")
+			if path == "" {
+				path = "index.html"
+			}
+			f, openErr := distSubFS.Open(path)
+			if openErr == nil {
+				_ = f.Close()
+				fileServer.ServeHTTP(w, r)
+				return
+			}
+			// SPA fallback: return index.html for unknown paths
+			r.URL.Path = "/"
+			fileServer.ServeHTTP(w, r)
+		}))
+	} else {
+		mux.HandleFunc("/", withAirGapCSP(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/" {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = io.WriteString(w, embeddedIndexHTML)
+		}))
+	}
 	mux.HandleFunc("/api/status", withAirGapCSP(engine.handleGetStatus))
 	mux.HandleFunc("/api/categories", withAirGapCSP(engine.handleCategories))
 	mux.HandleFunc("/api/upload", withAirGapCSP(engine.handleUpload))
