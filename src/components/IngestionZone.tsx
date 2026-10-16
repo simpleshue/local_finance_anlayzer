@@ -7,7 +7,6 @@ interface IngestionZoneProps {
   onIngestStatement: (rawText: string, filename: string) => Promise<IngestResult>;
   lastIngestResult: IngestResult | null;
   memoryEvents: MemoryZeroEvent[];
-  retainRawStatements: boolean;
   totalTransactionsCount: number;
   needsReviewCount: number;
   totalOutflowCents: number;
@@ -17,7 +16,6 @@ export const IngestionZone: React.FC<IngestionZoneProps> = ({
   onIngestStatement,
   lastIngestResult,
   memoryEvents,
-  retainRawStatements,
   totalTransactionsCount,
   needsReviewCount,
   totalOutflowCents,
@@ -99,7 +97,7 @@ export const IngestionZone: React.FC<IngestionZoneProps> = ({
               View 0: Ingestion Engine (Zero-Disk Spill)
             </span>
             <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-800">
-              {retainRawStatements ? 'AES-256-GCM Vault Mode' : 'RAM-Only Zeroization Active'}
+              RAM-Only Zeroization Active [defer clear()]
             </span>
           </div>
 

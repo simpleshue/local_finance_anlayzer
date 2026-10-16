@@ -31,6 +31,7 @@ import { RuleModal } from './components/RuleModal';
 import { SecurityConsole } from './components/SecurityConsole';
 import { CategoryManagerModal } from './components/CategoryManagerModal';
 import { AccountManagerModal } from './components/AccountManagerModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'triage' | 'ledger' | 'rules' | 'security'>('triage');
@@ -73,7 +74,14 @@ export default function App() {
             setCategories(status.categories);
           }
           if (Array.isArray(status.rules) && status.rules.length > 0) {
-            setRules(status.rules);
+            const mappedRules: Rule[] = status.rules.map((r: any, idx: number) => ({
+              id: r.id || `rule_${idx}`,
+              pattern: r.pattern || '',
+              category: r.category || 'Uncategorized',
+              cleanPayee: r.cleanPayee || r.clean_payee || '',
+              createdAt: r.createdAt || r.created_at || new Date().toISOString(),
+            }));
+            setRules(mappedRules);
           }
           if (status.accounts && typeof status.accounts === 'object') {
             const loadedAccts: Record<string, Account> = {};
@@ -595,42 +603,50 @@ export default function App() {
           <div className="lg:col-span-8 xl:col-span-9 2xl:col-span-9 space-y-6 w-full min-w-0">
             {/* Tab 1: Flagged Triage Inbox (View 1) */}
             {activeTab === 'triage' && (
-              <TriageInbox
-                transactions={transactions}
-                categories={categories}
-                onApprove={handleApproveTransaction}
-                onOpenRuleModal={handleOpenRuleModal}
-                onBatchApproveAll={handleBatchApproveAll}
-              />
+              <ErrorBoundary fallbackTitle="Triage Inbox View Error">
+                <TriageInbox
+                  transactions={transactions}
+                  categories={categories}
+                  onApprove={handleApproveTransaction}
+                  onOpenRuleModal={handleOpenRuleModal}
+                  onBatchApproveAll={handleBatchApproveAll}
+                />
+              </ErrorBoundary>
             )}
 
             {/* Tab 2: Full Deduplicated Encrypted Ledger (View 3) */}
             {activeTab === 'ledger' && (
-              <LedgerView
-                transactions={transactions}
-                accounts={accounts}
-                categories={categories}
-                onOpenRuleModal={handleOpenRuleModal}
-                onOpenCategoryManager={() => setIsCategoryManagerOpen(true)}
-                onUpdateTransactionCategory={handleUpdateTransactionCategory}
-              />
+              <ErrorBoundary fallbackTitle="Encrypted Ledger View Error">
+                <LedgerView
+                  transactions={transactions}
+                  accounts={accounts}
+                  categories={categories}
+                  onOpenRuleModal={handleOpenRuleModal}
+                  onOpenCategoryManager={() => setIsCategoryManagerOpen(true)}
+                  onUpdateTransactionCategory={handleUpdateTransactionCategory}
+                />
+              </ErrorBoundary>
             )}
 
             {/* Tab 3: RE2 Regex Rules List */}
             {activeTab === 'rules' && (
-              <RulesList
-                rules={rules}
-                onOpenCreateRule={() => handleOpenRuleModal('', '', categories[0] || 'Groceries')}
-                onDeleteRule={handleDeleteRule}
-              />
+              <ErrorBoundary fallbackTitle="RE2 Regex Rules View Error">
+                <RulesList
+                  rules={rules}
+                  onOpenCreateRule={() => handleOpenRuleModal('', '', categories[0] || 'Groceries')}
+                  onDeleteRule={handleDeleteRule}
+                />
+              </ErrorBoundary>
             )}
 
             {/* Tab 4: Security Console & Architecture Matrix */}
             {activeTab === 'security' && (
-              <SecurityConsole
-                memoryEvents={memoryEvents}
-                passphrase={passphrase}
-              />
+              <ErrorBoundary fallbackTitle="Security Console View Error">
+                <SecurityConsole
+                  memoryEvents={memoryEvents}
+                  passphrase={passphrase}
+                />
+              </ErrorBoundary>
             )}
           </div>
 

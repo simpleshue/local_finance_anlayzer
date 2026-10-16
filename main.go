@@ -1999,11 +1999,8 @@ async function refreshAll() {
   document.getElementById('statTotal').textContent = statusData.total_transactions;
 
   const policyBtn = document.getElementById('policyBtn');
-  if (statusData.retain_raw_statements) {
-    policyBtn.textContent = 'Retention Policy: AES-256-GCM Encrypted Vault (.enc)';
-    policyBtn.style.borderColor = 'var(--indigo)';
-  } else {
-    policyBtn.textContent = 'Retention Policy: Ephemeral RAM Purge (Default)';
+  if (policyBtn) {
+    policyBtn.textContent = 'Retention Policy: Ephemeral RAM Purge (Zero Disk Remanence)';
     policyBtn.style.borderColor = 'var(--emerald)';
   }
 

@@ -59,7 +59,7 @@ This document specifies the architecture for a completely local, single-tenant p
  │      ├── Method B: http.MaxBytesReader -> Mutable []byte    │
  │      ├── Zero-Allocation OFX / QFX Streaming Lexer          │
  │      ├── Deferred RAM Wipe: defer clear(rawBytes)           │
- │      └── Post-Ingest Policy: Ephemeral Purge OR AES-256-GCM │
+ │      └── Strict Ephemeral RAM Purge (No Disk Archiving)     │
  │               │                                             │
  │               ▼                                             │
  │   2. Normalization & Deduplication                          │
@@ -74,8 +74,8 @@ This document specifies the architecture for a completely local, single-tenant p
  │               │                                             │
  │               ▼                                             │
  │   4. Persistence Layer                                      │
- │      ├── Encrypted SQLite Database (SQLCipher / AES-256)    │
- │      └── Encrypted Vault Archive (*.ofx.enc, optional)      │
+ │      ├── Encrypted State Database (AES-256-GCM Ledger)      │
+ │      └── Zero Raw Statement Remanence (0 Raw Files on Disk) │
  │               │                                             │
  │               ▲                                             │
  │               ▼                                             │
@@ -132,35 +132,22 @@ Because older bank OFX 1.x files use unclosed SGML tags (e.g., `<TRNAMT>-42.50` 
 
 ---
 
-### 4.2 Raw Statement Retention, Encryption & Memory Hygiene Specification
+### 4.2 Raw Statement Retention & Memory Hygiene Specification
 
-Because raw `.ofx` and `.qfx` files are plaintext SGML/XML containing sensitive metadata (full `<ACCTID>`, `<BANKID>`, and ledger balances), saving raw files to `archive/` or `failed/` is prohibited.
+Because raw `.ofx` and `.qfx` files are plaintext SGML/XML containing sensitive metadata (full `<ACCTID>`, `<BANKID>`, and balance snapshots), persisting raw statement files to disk in any format (even encrypted) is prohibited.
 
-The pipeline enforces a configurable Post-Ingest Retention Policy defined in `config/config.json`:
+#### Architectural Decision: Dropped Raw Statement Vault Archive
+Earlier drafts considered an AES-256-GCM encrypted vault mode (`*.ofx.enc`) for statement payloads. **This mode was explicitly dropped** to adhere to the core zero-remanence security invariant:
+1. **Zero Raw Statement Disk Footprint**: Raw financial statement payloads never touch non-volatile storage. They exist exclusively in volatile memory slices during ingestion.
+2. **Explicit RAM Zeroization**: Once parsed and committed into the authenticated AES-256-GCM ledger state, the byte buffer is overwritten with zeroes in place via `defer clear(rawBytes)`.
+3. **No Plaintext CSV Support**: Ingestion is strictly restricted to authenticated `.ofx` and `.qfx` formats. Unstandardized `.csv` file ingestion is unsupported to prevent unverified account mappings and metadata leakage.
 
-```json
-{
-  "storage": {
-    "retain_raw_statements": false,
-    "encrypt_failed_dumps": false,
-    "pbkdf2_iterations": 600000
-  }
-}
-```
-
-#### Policy A: Ephemeral Purge Mode (`retain_raw_statements: false` — Default)
-
-- The uploaded or dropped `.ofx`/`.qfx` payload is read into a mutable `[]byte` slice.
-- Once transactions are committed to `ledger.db`, `clear(rawBytes)` overwrites every byte of the slice in RAM with `0x00` before the function returns.
-- If parsing fails, the error summary (line number and syntax exception, stripped of financial values) is returned to the UI, and the buffer is zeroed.
-
-#### Policy B: Encrypted Vault Mode (`retain_raw_statements: true`)
-
-If an audit trail of raw statements is desired, the raw payload is compressed with Go's standard `compress/zlib` and encrypted in memory using AES-256-GCM (`crypto/aes` + `crypto/cipher`) before touching the disk:
-
-$$\text{Ciphertext} = \text{MagicHeader}_{8\text{B}} \mathbin{\Vert} \text{Salt}_{16\text{B}} \mathbin{\Vert} \text{Nonce}_{12\text{B}} \mathbin{\Vert} \text{AES256-GCM}_{K}(\text{zlib}(\text{Plaintext}))$$
-
-#### Reference Implementation (`internal/vault/crypto_archive.go`)
+#### Post-Ingest Retention Policy: Pure Ephemeral Purge Mode
+- The uploaded or dropped `.ofx`/`.qfx` payload is read into a mutable `[]byte` slice capped strictly at 10 MB in volatile RAM.
+- Transactions are extracted and deduplicated into the encrypted ledger (`data/ledger.db`).
+- `clear(rawBytes)` overwrites every byte of the slice in RAM with `0x00` immediately before returning.
+- If parsing fails, the error summary (line number and syntax exception, stripped of financial values) is returned to the UI, and the buffer is zeroed immediately.
+- The `archive/` directory is not used for statement storage.
 
 ```go
 // Package vault provides zero-plaintext statement handling, explicit RAM zeroization,
