@@ -58,19 +58,22 @@ FINANCE_HOME="./finances_runtime" \
 ### 1. Ingesting Statements (OFX & QFX)
 The engine ingests standard financial SGML/XML statement files exported from any bank, credit card issuer, or credit union.
 
-1. Click the **"Ingest Statement"** button in the header, or drag & drop files directly onto the dropzone.
-2. **Supported file types**:
+1. Click the **"Ingest Statement"** button in the header.
+2. **Two Ingestion Modes**:
+   * **Upload File**: Drag & drop `.ofx` or `.qfx` files or click to browse.
+   * **Paste Raw Text**: Copy OFX or QFX text directly from your clipboard (e.g. from an online banking text export or terminal) and paste it into the built-in raw text box. Includes a **"Paste from Clipboard"** shortcut and live tag detection.
+3. **Supported Formats**:
    * `.ofx` (Open Financial Exchange standard)
-   * `.qfx` (Quicken standard exported by financial institutions)
+   * `.qfx` (Quicken format exported by financial institutions)
    * *(Note: Plaintext `.csv` is intentionally unsupported to prevent unstandardized payee leaks and unverified account formats).*
-3. **One-Click Demo Test**:
+4. **One-Click Demo Test**:
    * Click **"Chase Sapphire (9 txns)"** or **"Test Overlapping Statement"** inside the modal to test ingestion and deterministic deduplication instantly without real personal files.
-4. **Zero Raw Statement Retention (Pure Ephemeral RAM Purge)**:
+5. **Zero Raw Statement Retention (Pure Ephemeral RAM Purge)**:
    * Support for raw file archiving on disk (even encrypted `.enc` archives) was dropped to guarantee complete non-remanence.
-   * Uploaded `.ofx`/`.qfx` bytes are read strictly into a volatile memory slice (capped at 10 MB).
-   * Once parsed and committed into the encrypted ledger, the raw statement memory buffer is immediately wiped using Go's `clear(buf)`.
+   * Both uploaded files and pasted text are processed strictly in a volatile memory slice (capped at 10 MB).
+   * Once parsed and committed into the encrypted ledger, the raw memory buffer is immediately wiped using Go's built-in `clear(buf)`.
    * **Zero plaintext or encrypted raw statement files ever touch the disk.**
-5. **Deduplication Protection**:
+6. **Deduplication Protection**:
    * Ingesting overlapping date ranges or repeating uploads is completely safe. The engine computes a deterministic hash of the masked account ID and bank FITID (`fitid`), ignoring transactions that already exist.
 
 ---

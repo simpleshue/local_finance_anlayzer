@@ -113,7 +113,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onOpenIngestion}
               className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-slate-950 transition-colors flex items-center gap-1.5 shadow-sm whitespace-nowrap"
-              title="Upload or test .OFX / .QFX statement ingestion"
+              title="Upload or paste .OFX / .QFX statement text"
             >
               <UploadCloud className="w-3.5 h-3.5" />
               <span>Ingest Statement</span>
