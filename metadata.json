@@ -1,0 +1,6 @@
+{
+  "name": "Zero-Leak Air-Gapped Finance Engine",
+  "description": "Air-gapped, zero-dependency personal financial ingestion, classification, review, and analytics engine with loopback-only network guards and explicit RAM zeroization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

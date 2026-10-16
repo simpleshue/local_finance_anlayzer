@@ -1,0 +1,114 @@
+[
+  {
+    "id": "rule-1",
+    "pattern": "(?i)trader\\s*joe|whole\\s*fds|whole\\s*foods|costco|safeway|kroger|aldi|wegmans",
+    "category": "Groceries",
+    "clean_payee": "Trader Joe's",
+    "description": "Supermarkets & Groceries"
+  },
+  {
+    "id": "rule-2",
+    "pattern": "(?i)blue\\s*bottle|starbucks|peet's|philz|dunkin|cafe|bakery|restaurant",
+    "category": "Dining",
+    "clean_payee": "Dining & Cafe",
+    "description": "Restaurants, Cafes & Dining"
+  },
+  {
+    "id": "rule-3",
+    "pattern": "(?i)shell\\s*oil|chevron|exxon|mobil|bp#|arco|76\\s",
+    "category": "Transportation:Fuel",
+    "clean_payee": "Gasoline / Fuel",
+    "description": "Gasoline & Fuel"
+  },
+  {
+    "id": "rule-4",
+    "pattern": "(?i)jiffy\\s*lube|autozone|firestone|pep\\s*boys|dealership|toyota\\s*svc|honda\\s*svc|car\\s*wash",
+    "category": "Transportation:Car Maintenance",
+    "clean_payee": "Car Maintenance",
+    "description": "Automotive Maintenance & Repairs"
+  },
+  {
+    "id": "rule-5",
+    "pattern": "(?i)uber|lyft|mta\\s*nyct|bart|caltrain|clipper",
+    "category": "Transportation:Transit",
+    "clean_payee": "Transit / Rideshare",
+    "description": "Public Transit & Rideshare"
+  },
+  {
+    "id": "rule-6",
+    "pattern": "(?i)mortgage|chase\\s*home\\s*ln|wells\\s*fargo\\s*hm|rocket\\s*mort",
+    "category": "Housing:Mortgage",
+    "clean_payee": "Mortgage Payment",
+    "description": "Mortgage Payments"
+  },
+  {
+    "id": "rule-7",
+    "pattern": "(?i)county\\s*tax|property\\s*tax|treas\\s*tax",
+    "category": "Housing:Property Tax",
+    "clean_payee": "County Property Tax",
+    "description": "County & Municipal Property Taxes"
+  },
+  {
+    "id": "rule-8",
+    "pattern": "(?i)home\\s*depot|lowes|hardware|plumbing|hvac|roofing|ace\\s*hardware",
+    "category": "Housing:Maintenance",
+    "clean_payee": "Home Maintenance",
+    "description": "Home Maintenance & Repairs"
+  },
+  {
+    "id": "rule-9",
+    "pattern": "(?i)montessori|preschool|daycare|kindergarten|elementary|tuition|school",
+    "category": "Childcare:School",
+    "clean_payee": "School & Preschool",
+    "description": "School Tuition & Preschool"
+  },
+  {
+    "id": "rule-10",
+    "pattern": "(?i)little\\s*league|soccer\\s*club|swim\\s*school|gymnastics|martial\\s*arts|youth\\s*sports",
+    "category": "Childcare:Sports",
+    "clean_payee": "Youth Sports League",
+    "description": "Youth Sports Programs"
+  },
+  {
+    "id": "rule-11",
+    "pattern": "(?i)piano\\s*lessons|music\\s*academy|art\\s*studio\\s*kids|stem\\s*camp|scouts|dance\\s*academy",
+    "category": "Childcare:Extra-Curricular",
+    "clean_payee": "Kids Extra-Curricular",
+    "description": "Kids Extra-Curricular Activities"
+  },
+  {
+    "id": "rule-12",
+    "pattern": "(?i)pg&e|con\\s*edison|comcast|xfinity|verizon|at&t|t-mobile|water\\s*dept|electric",
+    "category": "Utilities",
+    "clean_payee": "Utilities & Internet",
+    "description": "Utilities: Electric, Water, Internet & Cellular"
+  },
+  {
+    "id": "rule-13",
+    "pattern": "(?i)netflix|spotify|hulu|apple\\.com/bill|nytimes|disney|hbo|paramount|steam|cinema|theatre",
+    "category": "Entertainment",
+    "clean_payee": "Media & Streaming",
+    "description": "Streaming, Subscriptions & Entertainment"
+  },
+  {
+    "id": "rule-14",
+    "pattern": "(?i)amzn|amazon\\.com|target|wal-mart|walmart",
+    "category": "Shopping",
+    "clean_payee": "Retail Shopping",
+    "description": "Retail Shopping"
+  },
+  {
+    "id": "rule-15",
+    "pattern": "(?i)payroll|direct\\s*dep|ach\\s*credit",
+    "category": "Income:Paycheck",
+    "clean_payee": "Payroll Deposit",
+    "description": "Payroll & Direct Deposits"
+  },
+  {
+    "id": "rule-16",
+    "pattern": "(?i)automatic\\s*payment|payment\\s*thank\\s*you|autopay",
+    "category": "Transfer:CreditCardPayment",
+    "clean_payee": "Autopay CC Transfer",
+    "description": "Credit Card Bill Pay Transfers"
+  }
+]

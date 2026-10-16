@@ -1,0 +1,32 @@
+{
+  "system": {
+    "app_name": "Zero-Leak Local Finance Engine",
+    "version": "1.0.0",
+    "air_gap_enforced": true
+  },
+  "network": {
+    "listen_address": "127.0.0.1:8000",
+    "enforce_loopback": true,
+    "read_timeout_seconds": 15,
+    "write_timeout_seconds": 15
+  },
+  "storage": {
+    "retain_raw_statements": false,
+    "post_ingest_policy": "ephemeral_ram_purge",
+    "pbkdf2_iterations": 600000,
+    "max_upload_bytes": 10485760
+  },
+  "directories": {
+    "config_dir": "./config",
+    "data_dir": "./data",
+    "inbox_dir": "./inbox",
+    "archive_dir": "./archive"
+  },
+  "categorization": {
+    "confidence_threshold": 0.85,
+    "enable_tier1_re2": true,
+    "enable_tier2_history": true,
+    "enable_tier3_local_llm": false,
+    "default_fallback_category": "Uncategorized"
+  }
+}

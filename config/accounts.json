@@ -1,0 +1,18 @@
+[
+  {
+    "id": "a89f92e9482b6c11",
+    "masked_display": "****9482",
+    "institution": "Chase Sapphire",
+    "type": "credit_card",
+    "currency": "USD",
+    "description": "Primary Chase Credit Card"
+  },
+  {
+    "id": "b12e34d7619c8822",
+    "masked_display": "****1104",
+    "institution": "Bank of America",
+    "type": "checking",
+    "currency": "USD",
+    "description": "Primary Checking Account"
+  }
+]
