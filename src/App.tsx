@@ -30,6 +30,7 @@ import { RulesList } from './components/RulesList';
 import { RuleModal } from './components/RuleModal';
 import { SecurityConsole } from './components/SecurityConsole';
 import { CategoryManagerModal } from './components/CategoryManagerModal';
+import { AccountManagerModal } from './components/AccountManagerModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'triage' | 'ledger' | 'rules' | 'security'>('triage');
@@ -45,6 +46,7 @@ export default function App() {
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [historyMap, setHistoryMap] = useState<Record<string, HistoryItem>>({});
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
+  const [isAccountManagerOpen, setIsAccountManagerOpen] = useState(false);
   const [isIngestionOpen, setIsIngestionOpen] = useState(false);
 
   const [lastIngestResult, setLastIngestResult] = useState<IngestResult | null>(null);
@@ -72,6 +74,25 @@ export default function App() {
           }
           if (Array.isArray(status.rules) && status.rules.length > 0) {
             setRules(status.rules);
+          }
+          if (status.accounts && typeof status.accounts === 'object') {
+            const loadedAccts: Record<string, Account> = {};
+            Object.values(status.accounts).forEach((a: any) => {
+              if (a && a.id) {
+                loadedAccts[a.id] = {
+                  id: a.id,
+                  maskedDisplay: a.masked_display || a.maskedDisplay || '****0000',
+                  institution: a.institution || 'Unknown Bank',
+                  type: a.type || 'credit_card',
+                  currency: a.currency || 'USD',
+                  description: a.description || '',
+                  createdAt: a.created_at || a.createdAt || new Date().toISOString(),
+                };
+              }
+            });
+            if (Object.keys(loadedAccts).length > 0) {
+              setAccounts(loadedAccts);
+            }
           }
         }
         const txRes = await fetch('/api/transactions');
@@ -504,6 +525,57 @@ export default function App() {
     });
   };
 
+  const handleUpdateAccount = async (updated: Account) => {
+    setAccounts(prev => ({
+      ...prev,
+      [updated.id]: updated,
+    }));
+    // Propagate updated masked number into transactions in memory
+    setTransactions(prev =>
+      prev.map(t => (t.accountId === updated.id ? { ...t, accountMasked: updated.maskedDisplay } : t))
+    );
+    // Sync with Go backend /api/accounts
+    try {
+      await fetch('/api/accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: updated.id,
+          masked_display: updated.maskedDisplay,
+          institution: updated.institution,
+          type: updated.type,
+          currency: updated.currency,
+          description: updated.description,
+        }),
+      });
+    } catch {
+      // Backend optional in preview
+    }
+  };
+
+  const handleAddAccount = async (newAcc: Account) => {
+    setAccounts(prev => ({
+      ...prev,
+      [newAcc.id]: newAcc,
+    }));
+    try {
+      await fetch('/api/accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newAcc.id,
+          masked_display: newAcc.maskedDisplay,
+          institution: newAcc.institution,
+          type: newAcc.type,
+          currency: newAcc.currency,
+          description: newAcc.description,
+        }),
+      });
+    } catch {
+      // Backend optional in preview
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
       {/* Header */}
@@ -514,6 +586,7 @@ export default function App() {
         totalRecordsCount={transactions.length}
         onOpenIngestion={() => setIsIngestionOpen(true)}
         onOpenCategoryManager={() => setIsCategoryManagerOpen(true)}
+        onOpenAccountManager={() => setIsAccountManagerOpen(true)}
       />
 
       <main className="w-full max-w-[1750px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-10 py-6">
@@ -605,6 +678,15 @@ export default function App() {
         onAddCategory={handleAddCategory}
         onRenameCategory={handleRenameCategory}
         onDeleteCategory={handleDeleteCategory}
+      />
+
+      {/* Account Manager Modal */}
+      <AccountManagerModal
+        isOpen={isAccountManagerOpen}
+        onClose={() => setIsAccountManagerOpen(false)}
+        accounts={accounts}
+        onUpdateAccount={handleUpdateAccount}
+        onAddAccount={handleAddAccount}
       />
     </div>
   );

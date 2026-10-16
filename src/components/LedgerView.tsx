@@ -230,7 +230,7 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
               <option value="ALL">All Accounts</option>
               {Object.values(accounts).map(a => (
                 <option key={a.id} value={a.id}>
-                  {a.institution} ({a.maskedDisplay})
+                  {a.institution} ({a.maskedDisplay}){a.description ? ` — ${a.description}` : ''}
                 </option>
               ))}
             </select>

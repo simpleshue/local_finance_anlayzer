@@ -134,6 +134,7 @@ type Account struct {
 	Institution   string    `json:"institution"`    // Bank or card issuer
 	Type          string    `json:"type"`           // "credit_card", "checking", etc.
 	Currency      string    `json:"currency"`
+	Description   string    `json:"description,omitempty"` // User friendly nickname e.g. "Primary Checking"
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -567,6 +568,7 @@ type FinanceEngine struct {
 	dbPath         string
 	rulesPath      string
 	categoriesPath string
+	accountsPath   string
 	configPath     string
 }
 
@@ -587,6 +589,67 @@ func (e *FinanceEngine) loadCategoriesFromConfig() error {
 	}
 	e.categoryNames = names
 	return nil
+}
+
+// loadAccountsFromConfig reads predefined account nicknames/metadata from config/accounts.json
+func (e *FinanceEngine) loadAccountsFromConfig() error {
+	path := e.accountsPath
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// Fallback to example if user has not yet customized accounts.json
+		data, err = os.ReadFile(path + ".example")
+		if err != nil {
+			return err
+		}
+	}
+	var fileAccts []Account
+	if err := json.Unmarshal(data, &fileAccts); err != nil {
+		return err
+	}
+	for _, a := range fileAccts {
+		if a.ID == "" {
+			continue
+		}
+		if existing, ok := e.state.Accounts[a.ID]; ok {
+			if a.Institution != "" {
+				existing.Institution = a.Institution
+			}
+			if a.MaskedDisplay != "" {
+				existing.MaskedDisplay = a.MaskedDisplay
+			}
+			if a.Type != "" {
+				existing.Type = a.Type
+			}
+			if a.Description != "" {
+				existing.Description = a.Description
+			}
+			if a.Currency != "" {
+				existing.Currency = a.Currency
+			}
+			e.state.Accounts[a.ID] = existing
+		} else {
+			if a.CreatedAt.IsZero() {
+				a.CreatedAt = time.Now()
+			}
+			e.state.Accounts[a.ID] = a
+		}
+	}
+	return nil
+}
+
+func (e *FinanceEngine) saveAccountsToConfigLocked() error {
+	accts := make([]Account, 0, len(e.state.Accounts))
+	for _, a := range e.state.Accounts {
+		accts = append(accts, a)
+	}
+	sort.Slice(accts, func(i, j int) bool {
+		return accts[i].Institution < accts[j].Institution
+	})
+	data, err := json.MarshalIndent(accts, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(e.accountsPath, data, 0600)
 }
 
 // loadRulesFromConfig reads and compiles deterministic RE2 rules from /config/rules.json.
@@ -628,6 +691,7 @@ func NewFinanceEngine(cfg Config, passphrase []byte) (*FinanceEngine, error) {
 		dbPath:         filepath.Join(cfg.DataDir, "ledger.db.enc"),
 		rulesPath:      filepath.Join(cfg.ConfigDir, "rules.json"),
 		categoriesPath: filepath.Join(cfg.ConfigDir, "categories.json"),
+		accountsPath:   filepath.Join(cfg.ConfigDir, "accounts.json"),
 		configPath:     filepath.Join(cfg.ConfigDir, "config.json"),
 		state: LedgerState{
 			Accounts:     make(map[string]Account),
@@ -651,7 +715,14 @@ func NewFinanceEngine(cfg Config, passphrase []byte) (*FinanceEngine, error) {
 		log.Printf("[CONFIG] Loaded %d rules from %s", len(eng.state.Rules), eng.rulesPath)
 	}
 
-	// 3. Load encrypted state
+	// 3. External configuration loading: accounts from /config/accounts.json
+	if err := eng.loadAccountsFromConfig(); err != nil {
+		log.Printf("[CONFIG] Warning: could not load %s: %v", eng.accountsPath, err)
+	} else {
+		log.Printf("[CONFIG] Loaded %d accounts from %s", len(eng.state.Accounts), eng.accountsPath)
+	}
+
+	// 4. Load encrypted state
 	if err := eng.loadEncryptedState(); err != nil {
 		return nil, err
 	}
@@ -1391,6 +1462,76 @@ func (e *FinanceEngine) handleCategories(w http.ResponseWriter, r *http.Request)
 		"categories": e.categories,
 		"names":      e.categoryNames,
 	})
+}
+
+func (e *FinanceEngine) handleAccounts(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		e.mu.RLock()
+		defer e.mu.RUnlock()
+		accts := make([]Account, 0, len(e.state.Accounts))
+		for _, a := range e.state.Accounts {
+			accts = append(accts, a)
+		}
+		sort.Slice(accts, func(i, j int) bool {
+			return accts[i].Institution < accts[j].Institution
+		})
+		writeJSON(w, http.StatusOK, accts)
+		return
+	}
+
+	if r.Method == http.MethodPost || r.Method == http.MethodPut {
+		var payload Account
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json payload"})
+			return
+		}
+		if payload.ID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "account ID is required"})
+			return
+		}
+
+		e.mu.Lock()
+		defer e.mu.Unlock()
+
+		acc, exists := e.state.Accounts[payload.ID]
+		if !exists {
+			acc = payload
+			if acc.CreatedAt.IsZero() {
+				acc.CreatedAt = time.Now()
+			}
+		} else {
+			if payload.Institution != "" {
+				acc.Institution = payload.Institution
+			}
+			if payload.MaskedDisplay != "" {
+				acc.MaskedDisplay = payload.MaskedDisplay
+			}
+			if payload.Type != "" {
+				acc.Type = payload.Type
+			}
+			acc.Description = payload.Description
+			if payload.Currency != "" {
+				acc.Currency = payload.Currency
+			}
+		}
+		e.state.Accounts[payload.ID] = acc
+
+		// Propagate updated masked display to transactions
+		for txID, tx := range e.state.Transactions {
+			if tx.AccountID == payload.ID {
+				tx.AccountMasked = acc.MaskedDisplay
+				e.state.Transactions[txID] = tx
+			}
+		}
+
+		_ = e.saveEncryptedStateLocked()
+		_ = e.saveAccountsToConfigLocked()
+
+		writeJSON(w, http.StatusOK, acc)
+		return
+	}
+
+	writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 }
 
 // ============================================================================
@@ -2295,6 +2436,7 @@ func main() {
 	}
 	mux.HandleFunc("/api/status", withAirGapCSP(engine.handleGetStatus))
 	mux.HandleFunc("/api/categories", withAirGapCSP(engine.handleCategories))
+	mux.HandleFunc("/api/accounts", withAirGapCSP(engine.handleAccounts))
 	mux.HandleFunc("/api/upload", withAirGapCSP(engine.handleUpload))
 	mux.HandleFunc("/api/transactions", withAirGapCSP(engine.handleGetTransactions))
 	mux.HandleFunc("/api/transactions/categorize", withAirGapCSP(engine.handleCategorizeTransaction))

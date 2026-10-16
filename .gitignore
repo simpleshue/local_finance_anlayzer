@@ -5,3 +5,17 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Sensitive user configs & personal account mappings
+config/accounts.json
+accounts.json
+!config/accounts.json.example
+
+# Local encrypted database and statement files
+data/
+inbox/
+archive/
+finances_runtime/
+*.db
+*.tmp
+

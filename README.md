@@ -68,3 +68,23 @@ environment:
 
 Access from any device on your local network:
 `http://<SERVER_LAN_IP>:8811` (e.g. `http://192.168.1.50:8811`)
+
+## Account Configuration & Privacy
+
+### 1. How Accounts Are Configured & Edited
+Accounts can be managed in two ways:
+* **Interactive Web UI**: Click the **"Accounts"** button in the top navigation bar to open the Account Manager modal. You can add new accounts, customize bank/institution names, edit friendly nicknames (e.g., "Household Bills Checking"), and change account types. All changes sync immediately to your encrypted ledger and `config/accounts.json`.
+* **Config File**: Edit `config/accounts.json` on your host machine before starting or restarting the engine.
+* **Automatic Discovery**: When statements are ingested (OFX/QFX/CSV), new account numbers are automatically masked (last 4 digits), hashed with HMAC-SHA256, and registered into the engine.
+
+### 2. Skipping Accounts When Pushing to GitHub
+Your actual `config/accounts.json` is **automatically excluded** by `.gitignore`:
+```gitignore
+# Sensitive user configs & personal account mappings
+config/accounts.json
+accounts.json
+!config/accounts.json.example
+```
+To share the project or upload it to GitHub safely:
+1. `config/accounts.json.example` is committed as an anonymized template with placeholder accounts.
+2. Your real `config/accounts.json` remains strictly on your local machine / Docker volume and is never committed or pushed to remote repositories.

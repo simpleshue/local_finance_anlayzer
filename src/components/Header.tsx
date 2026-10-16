@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, ShieldAlert, Lock, Cpu, Database, UploadCloud, Tag } from 'lucide-react';
+import { Shield, ShieldAlert, Lock, Cpu, Database, UploadCloud, Tag, Building2 } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: string;
@@ -8,6 +8,7 @@ interface HeaderProps {
   totalRecordsCount: number;
   onOpenIngestion: () => void;
   onOpenCategoryManager: () => void;
+  onOpenAccountManager: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -17,6 +18,7 @@ export const Header: React.FC<HeaderProps> = ({
   totalRecordsCount,
   onOpenIngestion,
   onOpenCategoryManager,
+  onOpenAccountManager,
 }) => {
   return (
     <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
@@ -106,7 +108,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span>RE2 Regex Rules</span>
           </button>
 
-          {/* Action Buttons: Ingest & Categories between RE2 Rules and Security */}
+          {/* Action Buttons: Ingest, Categories & Accounts between RE2 Rules and Security */}
           <div className="flex items-center gap-2 px-2 border-l border-r border-slate-800 shrink-0">
             <button
               onClick={onOpenIngestion}
@@ -124,6 +126,15 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Tag className="w-3.5 h-3.5 text-indigo-400" />
               <span>Categories</span>
+            </button>
+
+            <button
+              onClick={onOpenAccountManager}
+              className="px-3.5 py-2 rounded-lg text-xs font-medium border bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 transition-colors flex items-center gap-1.5 shadow-sm whitespace-nowrap"
+              title="Configure account nicknames, institutions, and git privacy"
+            >
+              <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Accounts</span>
             </button>
           </div>
 

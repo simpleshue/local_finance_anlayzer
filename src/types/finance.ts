@@ -4,6 +4,7 @@ export interface Account {
   institution: string;
   type: 'credit_card' | 'checking' | 'brokerage' | 'savings';
   currency: string;
+  description?: string;
   createdAt: string;
 }
 
