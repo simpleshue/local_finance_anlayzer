@@ -35,3 +35,30 @@ docker run -d \
   -p 127.0.0.1:8000:8000 \
   airgapped-finance:latest
 ```
+
+
+## Setup FINANCE_PASSPHARASE
+
+Create a .env file in your project directory:
+```Bash
+cat << 'EOF' > .env
+FINANCE_PASSPHRASE=[something here]!
+EOF
+```
+Restrict file permissions so other Linux users cannot read it:
+
+```Bash
+chmod 600 .env
+```
+
+In docker-compose.yml, update the environment line:
+```Yaml
+environment:
+  - FINANCE_PASSPHRASE=${FINANCE_PASSPHRASE}
+  - FINANCE_LISTEN=127.0.0.1:8000
+```
+
+Start the container:
+```Bash
+docker compose up -d
+```
