@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { UploadCloud, CheckCircle2, AlertTriangle, Shield, Eye, RefreshCw, FileText, Lock } from 'lucide-react';
 import { IngestResult, MemoryZeroEvent } from '../types/finance';
-import { SAMPLE_CHASE_OFX, SAMPLE_OVERLAPPING_OFX, SAMPLE_CHECKING_OFX } from '../data/seedData';
+import { SAMPLE_CHASE_OFX, SAMPLE_OVERLAPPING_OFX, SAMPLE_CHECKING_OFX } from '../constants/seedData';
 
 interface IngestionZoneProps {
   onIngestStatement: (rawText: string, filename: string) => Promise<IngestResult>;

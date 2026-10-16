@@ -16,7 +16,7 @@ import {
   STARTER_RULES,
   INITIAL_ACCOUNT,
   INITIAL_TRANSACTIONS,
-} from './data/seedData';
+} from './constants/seedData';
 import { DEFAULT_CATEGORIES } from './types/finance';
 import { parseOFX } from './engine/ofxLexer';
 import { categorizeTransaction } from './engine/categorizer';

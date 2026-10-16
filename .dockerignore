@@ -1,12 +1,22 @@
 node_modules
 .git
 .github
-data
-inbox
-archive
-finances_runtime
+
+# Root-level runtime & storage folders only (anchored to root with leading slash)
+/data
+/inbox
+/archive
+/finances_runtime
+
+# Sensitive user configs & personal account mappings
 config/accounts.json
+accounts.json
+
+# Local temp & db files
 *.db
 *.tmp
 *.log
 .DS_Store
+
+# Explicitly ensure nothing in src is ever ignored by docker
+!src/**
