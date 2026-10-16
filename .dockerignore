@@ -1,0 +1,12 @@
+node_modules
+.git
+.github
+data
+inbox
+archive
+finances_runtime
+config/accounts.json
+*.db
+*.tmp
+*.log
+.DS_Store

@@ -1,14 +1,14 @@
 # Multi-Stage Zero-Dependency Production Dockerfile
 # Air-Gapped Personal Finance Engine with Modern Embedded Web UI
 
-# Stage 1: Build modern React frontend
-FROM node:22-alpine AS frontend-builder
+# Stage 1: Build modern React frontend using Debian glibc Node for complete native module compatibility
+FROM node:22-slim AS frontend-builder
 WORKDIR /app
 
 # Copy dependency specifications first to leverage Docker layer caching
 COPY package.json package-lock.json* ./
 
-# Install dependencies cleanly using lockfile if available, with peer deps handled
+# Install dependencies cleanly
 RUN npm ci --prefer-offline --no-audit --no-fund || npm install --no-audit --no-fund
 
 # Copy frontend source code and configs
