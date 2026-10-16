@@ -5,7 +5,7 @@
     "air_gap_enforced": true
   },
   "network": {
-    "listen_address": "127.0.0.1:8000",
+    "listen_address": "127.0.0.1:8811",
     "enforce_loopback": true,
     "read_timeout_seconds": 15,
     "write_timeout_seconds": 15

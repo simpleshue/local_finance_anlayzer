@@ -6,10 +6,12 @@ services:
     container_name: finance-engine
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8000:8000"
+      # Port 8811 mapped to container port 8811. Omit 127.0.0.1 to allow LAN access.
+      - "${FINANCE_PORT:-8811}:8811"
     environment:
-      - FINANCE_PASSPHRASE=change-me-to-a-very-strong-passphrase
-      - FINANCE_LISTEN=127.0.0.1:8000
+      - FINANCE_PASSPHRASE=${FINANCE_PASSPHRASE:-change-me-to-a-very-strong-passphrase}
+      # Listen on 0.0.0.0 inside container so Docker bridge can forward LAN traffic
+      - FINANCE_LISTEN=0.0.0.0:8811
       - FINANCE_HOME=/finances_runtime
       - FINANCE_CONFIG_DIR=/config
     cap_add:

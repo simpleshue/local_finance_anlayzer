@@ -2077,13 +2077,19 @@ func main() {
 		}
 	}
 	if listenAddr == "" {
-		listenAddr = "127.0.0.1:8000"
+		listenAddr = "127.0.0.1:8811"
 	}
 
-	// Enforce strict loopback binding check before opening listener
+	// Binding check: Supports 127.0.0.1 (local only) or 0.0.0.0 (LAN / Docker ingress)
 	host, _, err := net.SplitHostPort(listenAddr)
-	if err != nil || (host != "127.0.0.1" && host != "::1" && host != "localhost") {
-		log.Fatalf("[SECURITY FATAL] Listen address %q violates loopback-only policy (must bind to 127.0.0.1)", listenAddr)
+	if err != nil {
+		log.Fatalf("[FATAL] Invalid listen address %q: %v", listenAddr, err)
+	}
+	if host != "127.0.0.1" && host != "::1" && host != "localhost" && host != "0.0.0.0" && host != "" {
+		log.Fatalf("[SECURITY FATAL] Listen address %q must be loopback (127.0.0.1) or 0.0.0.0", listenAddr)
+	}
+	if host == "0.0.0.0" || host == "" {
+		log.Printf("[NOTICE] Inbound LAN access enabled (listening on %s). Outbound air-gap traps remain strictly enforced.", listenAddr)
 	}
 
 	passphraseStr := os.Getenv("FINANCE_PASSPHRASE")

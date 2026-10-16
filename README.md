@@ -17,7 +17,7 @@ CGO_ENABLED=0 go build -tags "netgo osusergo" -ldflags="-s -w" -o finance-engine
 ## Run Local Engine
 ```bash
 FINANCE_PASSPHRASE="your-strong-vault-passphrase" \
-FINANCE_LISTEN="127.0.0.1:8000" \
+FINANCE_LISTEN="127.0.0.1:8811" \
 FINANCE_HOME="./finances_runtime" \
 ./finance-engine
 ```
@@ -32,33 +32,39 @@ docker run -d \
   --memory 512m --memory-swap 512m \
   --tmpfs /tmp:rw,noexec,nosuid,size=64m \
   -v $(pwd)/data:/finances_runtime/data \
-  -p 127.0.0.1:8000:8000 \
+  -p 127.0.0.1:8811:8811 \
   airgapped-finance:latest
 ```
 
+Or use docker compose:
+```bash
+docker compose up -d --build
+```
 
-## Setup FINANCE_PASSPHARASE
+## Setup FINANCE_PASSPHRASE
 
 Create a .env file in your project directory:
-```Bash
+```bash
 cat << 'EOF' > .env
-FINANCE_PASSPHRASE=[something here]!
+FINANCE_PASSPHRASE=your-strong-vault-passphrase
+FINANCE_PORT=8811
 EOF
 ```
 Restrict file permissions so other Linux users cannot read it:
 
-```Bash
+```bash
 chmod 600 .env
 ```
 
-In docker-compose.yml, update the environment line:
-```Yaml
+In `docker-compose.yml`, the ports and environment are configured for port 8811 and LAN access:
+```yaml
+ports:
+  # Maps host port 8811 to container port 8811; enables access from your LAN
+  - "${FINANCE_PORT:-8811}:8811"
 environment:
   - FINANCE_PASSPHRASE=${FINANCE_PASSPHRASE}
-  - FINANCE_LISTEN=127.0.0.1:8000
+  - FINANCE_LISTEN=0.0.0.0:8811
 ```
 
-Start the container:
-```Bash
-docker compose up -d
-```
+Access from any device on your local network:
+`http://<SERVER_LAN_IP>:8811` (e.g. `http://192.168.1.50:8811`)

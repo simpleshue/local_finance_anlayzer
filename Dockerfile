@@ -17,6 +17,6 @@ COPY --from=builder /finance-engine /finance-engine
 COPY --from=builder /src/config /config
 
 # Security invariant: No shell, no package manager, no certificates needed for local loopback
-EXPOSE 8000
+EXPOSE 8811
 ENTRYPOINT ["/finance-engine"]
 
