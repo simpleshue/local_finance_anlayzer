@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, CreditCard, Building2, Check, Edit2, Plus, ShieldCheck, AlertCircle, FileText, Info } from 'lucide-react';
 import { Account } from '../types/finance';
+import { generateRandomHex } from '../engine/crypto';
 
 interface AccountManagerModalProps {
   isOpen: boolean;
@@ -63,9 +64,7 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({
     if (!newInstitution.trim()) return;
 
     // Generate pseudo-deterministic 16-hex HMAC ID
-    const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(8)))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
+    const randomHex = generateRandomHex(8);
 
     const newAcc: Account = {
       id: randomHex,

@@ -32,6 +32,7 @@ import { SecurityConsole } from './components/SecurityConsole';
 import { CategoryManagerModal } from './components/CategoryManagerModal';
 import { AccountManagerModal } from './components/AccountManagerModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { TransactionFormModal } from './components/TransactionFormModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'triage' | 'ledger' | 'rules' | 'security'>('triage');
@@ -584,6 +585,85 @@ export default function App() {
     }
   };
 
+  const [editingTxFromTriage, setEditingTxFromTriage] = useState<Transaction | null>(null);
+
+  const handleSaveTransaction = async (tx: Transaction) => {
+    setTransactions(prev => {
+      const exists = prev.some(t => t.id === tx.id);
+      if (exists) {
+        return prev.map(t => (t.id === tx.id ? tx : t));
+      }
+      return [tx, ...prev];
+    });
+
+    try {
+      await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: tx.id,
+          account_id: tx.accountId,
+          account_masked: tx.accountMasked,
+          transaction_date: tx.transactionDate,
+          amount_cents: tx.amountCents,
+          raw_payee: tx.rawPayee,
+          clean_payee: tx.cleanPayee,
+          category: tx.category,
+          confidence_score: tx.confidenceScore,
+          needs_review: tx.needsReview,
+          categorization_tier: tx.categorizationTier,
+          user_verified: tx.userVerified,
+          source_file_hash: tx.sourceFileHash,
+          imported_at: tx.importedAt,
+        }),
+      });
+    } catch {
+      // Offline fallback
+    }
+  };
+
+  const handleDeleteTransaction = async (id: string) => {
+    setTransactions(prev => prev.filter(t => t.id !== id));
+    try {
+      await fetch(`/api/transactions?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+    } catch {
+      // Offline fallback
+    }
+  };
+
+  const handleBulkDeleteTransactions = async (ids: string[]) => {
+    const idSet = new Set(ids);
+    setTransactions(prev => prev.filter(t => !idSet.has(t.id)));
+    try {
+      await fetch('/api/transactions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+    } catch {
+      // Offline fallback
+    }
+  };
+
+  const handleBatchVerifyTransactions = async (ids: string[]) => {
+    const idSet = new Set(ids);
+    setTransactions(prev =>
+      prev.map(t => (idSet.has(t.id) ? { ...t, userVerified: true, needsReview: false } : t))
+    );
+    for (const id of ids) {
+      const tx = transactions.find(t => t.id === id);
+      if (tx) {
+        fetch('/api/transactions/categorize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, category: tx.category, clean_payee: tx.cleanPayee }),
+        }).catch(() => {});
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
       {/* Header */}
@@ -610,6 +690,8 @@ export default function App() {
                   onApprove={handleApproveTransaction}
                   onOpenRuleModal={handleOpenRuleModal}
                   onBatchApproveAll={handleBatchApproveAll}
+                  onEditTransaction={tx => setEditingTxFromTriage(tx)}
+                  onDeleteTransaction={handleDeleteTransaction}
                 />
               </ErrorBoundary>
             )}
@@ -624,6 +706,10 @@ export default function App() {
                   onOpenRuleModal={handleOpenRuleModal}
                   onOpenCategoryManager={() => setIsCategoryManagerOpen(true)}
                   onUpdateTransactionCategory={handleUpdateTransactionCategory}
+                  onSaveTransaction={handleSaveTransaction}
+                  onDeleteTransaction={handleDeleteTransaction}
+                  onBulkDeleteTransactions={handleBulkDeleteTransactions}
+                  onBatchVerifyTransactions={handleBatchVerifyTransactions}
                 />
               </ErrorBoundary>
             )}
@@ -704,6 +790,20 @@ export default function App() {
         onUpdateAccount={handleUpdateAccount}
         onAddAccount={handleAddAccount}
       />
+
+      {/* Transaction Edit Modal for Triage Inbox */}
+      {editingTxFromTriage && (
+        <TransactionFormModal
+          isOpen={!!editingTxFromTriage}
+          onClose={() => setEditingTxFromTriage(null)}
+          mode="edit"
+          initialTransaction={editingTxFromTriage}
+          accounts={accounts}
+          categories={categories}
+          onSave={handleSaveTransaction}
+          onDelete={handleDeleteTransaction}
+        />
+      )}
     </div>
   );
 }

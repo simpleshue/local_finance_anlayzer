@@ -1,6 +1,26 @@
 import React, { useState, useMemo } from 'react';
 import { Transaction, Account } from '../types/finance';
-import { Search, Filter, Download, CheckCircle2, AlertTriangle, ArrowDownRight, ArrowUpRight, Database, Tag, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import {
+  Search,
+  Download,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  Tag,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Plus,
+  Edit2,
+  Trash2,
+  CheckSquare,
+  Square,
+  MinusSquare,
+  Shield,
+  Layers,
+} from 'lucide-react';
+import { TransactionFormModal } from './TransactionFormModal';
 
 interface LedgerViewProps {
   transactions: Transaction[];
@@ -9,6 +29,10 @@ interface LedgerViewProps {
   onOpenRuleModal: (rawPayee: string, cleanPayee: string, currentCategory: string) => void;
   onOpenCategoryManager: () => void;
   onUpdateTransactionCategory: (id: string, newCategory: string) => void;
+  onSaveTransaction: (tx: Transaction) => void;
+  onDeleteTransaction: (id: string) => void;
+  onBulkDeleteTransactions: (ids: string[]) => void;
+  onBatchVerifyTransactions?: (ids: string[]) => void;
 }
 
 type LedgerSortColumn = 'date' | 'account' | 'payee' | 'amount' | 'category' | 'tier' | 'status';
@@ -20,6 +44,10 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
   onOpenRuleModal,
   onOpenCategoryManager,
   onUpdateTransactionCategory,
+  onSaveTransaction,
+  onDeleteTransaction,
+  onBulkDeleteTransactions,
+  onBatchVerifyTransactions,
 }) => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -27,6 +55,21 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
   const [verificationFilter, setVerificationFilter] = useState<'ALL' | 'VERIFIED' | 'REVIEW'>('ALL');
   const [sortColumn, setSortColumn] = useState<LedgerSortColumn>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  // Multi-selection state for bulk actions
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
+  // Modal State for Manual Add / Edit
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    mode: 'create' | 'edit';
+    transaction: Transaction | null;
+  }>({
+    isOpen: false,
+    mode: 'create',
+    transaction: null,
+  });
 
   // Compute category totals
   const { categoryTotals, totalOutflow, totalInflow } = useMemo(() => {
@@ -106,8 +149,51 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
     });
   }, [filtered, sortColumn, sortDirection]);
 
+  // Bulk Selection Handlers
+  const isAllFilteredSelected = sorted.length > 0 && sorted.every(tx => selectedIds.has(tx.id));
+  const isSomeFilteredSelected = sorted.some(tx => selectedIds.has(tx.id)) && !isAllFilteredSelected;
+
+  const handleToggleSelectAll = () => {
+    if (isAllFilteredSelected) {
+      const next = new Set(selectedIds);
+      sorted.forEach(tx => next.delete(tx.id));
+      setSelectedIds(next);
+    } else {
+      const next = new Set(selectedIds);
+      sorted.forEach(tx => next.add(tx.id));
+      setSelectedIds(next);
+    }
+  };
+
+  const handleToggleSelectOne = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedIds(next);
+  };
+
+  const handleExecuteBulkDelete = () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    onBulkDeleteTransactions(ids);
+    setSelectedIds(new Set());
+    setShowBulkDeleteConfirm(false);
+  };
+
+  const handleExecuteBulkVerify = () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (onBatchVerifyTransactions) {
+      onBatchVerifyTransactions(ids);
+    }
+    setSelectedIds(new Set());
+  };
+
   const exportCSV = () => {
-    const headers = ['ID', 'Date', 'Account', 'Merchant', 'Raw Payee', 'Amount', 'Category', 'Confidence', 'Tier', 'Verified', 'Payload Hash'];
+    const headers = ['ID', 'Date', 'Account', 'Merchant', 'Raw Payee', 'Amount', 'Category', 'Confidence', 'Tier', 'Verified'];
     const rows = filtered.map(t => [
       t.id,
       t.transactionDate,
@@ -119,7 +205,6 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
       t.confidenceScore,
       t.categorizationTier,
       t.userVerified ? 'YES' : 'NO',
-      t.sourceFileHash,
     ]);
 
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -135,16 +220,18 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Category Spend Breakdown (Client-Side Computed) */}
+      {/* Category Spending Breakdown Header Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-3 border-b border-slate-800">
           <div>
             <h3 className="text-sm uppercase tracking-wider font-bold text-slate-100 flex items-center gap-2">
-              <Database className="w-4 h-4 text-indigo-400" />
-              <span>Category Spend Breakdown (Client-Side In-Memory)</span>
+              <span className="p-1 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
+                <Tag className="w-3.5 h-3.5" />
+              </span>
+              <span>Encrypted Ledger Analytics</span>
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Aggregated directly from deduplicated SQLite records without server roundtrips.
+              Spending distribution derived deterministically from local encrypted ledger records.
             </p>
           </div>
 
@@ -192,7 +279,7 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
+      {/* Filter, Search, and Action Bar */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-4 border-b border-slate-800">
           <div className="flex flex-wrap items-center gap-2">
@@ -248,13 +335,23 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Manual Add Transaction Button */}
+            <button
+              onClick={() => setModalState({ isOpen: true, mode: 'create', transaction: null })}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-slate-950 transition-colors flex items-center gap-1.5 shadow-sm"
+              title="Add a manual transaction"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>+ Add Transaction</span>
+            </button>
+
             <button
               onClick={onOpenCategoryManager}
               className="px-3 py-1.5 rounded-lg text-xs font-mono font-medium bg-indigo-950/60 hover:bg-indigo-900/60 text-indigo-300 border border-indigo-700/60 transition-colors flex items-center gap-1.5 shadow-sm"
               title="View all categories, add custom categories, or rename"
             >
               <Tag className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Manage Categories</span>
+              <span>Categories</span>
             </button>
 
             <button
@@ -263,16 +360,94 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
               title="Export filtered records to local CSV file"
             >
               <Download className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Export CSV ({filtered.length})</span>
+              <span>Export CSV</span>
             </button>
           </div>
         </div>
+
+        {/* Bulk Actions Sticky Bar */}
+        {selectedIds.size > 0 && (
+          <div className="mb-4 p-3 bg-indigo-950/60 border border-indigo-700/60 rounded-xl flex flex-wrap items-center justify-between gap-3 animate-fadeIn">
+            <div className="flex items-center gap-2 text-xs font-mono text-indigo-200">
+              <CheckSquare className="w-4 h-4 text-indigo-400" />
+              <span>
+                <strong>{selectedIds.size}</strong> transaction{selectedIds.size > 1 ? 's' : ''} selected
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {showBulkDeleteConfirm ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-rose-300 font-medium">Delete {selectedIds.size} records?</span>
+                  <button
+                    onClick={handleExecuteBulkDelete}
+                    className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded text-xs font-semibold shadow-xs"
+                  >
+                    Yes, Delete All
+                  </button>
+                  <button
+                    onClick={() => setShowBulkDeleteConfirm(false)}
+                    className="px-2 py-1 text-xs text-slate-300 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowBulkDeleteConfirm(true)}
+                  className="px-3 py-1.5 bg-rose-950/80 hover:bg-rose-900/80 text-rose-200 border border-rose-800/80 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Delete Selected ({selectedIds.size})</span>
+                </button>
+              )}
+
+              {onBatchVerifyTransactions && (
+                <button
+                  onClick={handleExecuteBulkVerify}
+                  className="px-3 py-1.5 bg-emerald-950/80 hover:bg-emerald-900/80 text-emerald-200 border border-emerald-800/80 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Mark Verified ({selectedIds.size})</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  setSelectedIds(new Set());
+                  setShowBulkDeleteConfirm(false);
+                }}
+                className="px-2.5 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+              >
+                Deselect All
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Transactions Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-800 text-[11px] font-mono text-slate-400 uppercase tracking-wider select-none">
+                {/* Select All Checkbox */}
+                <th className="py-2 px-3 w-8">
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectAll}
+                    className="text-slate-400 hover:text-slate-200 p-0.5 rounded"
+                    title={isAllFilteredSelected ? 'Deselect all' : 'Select all'}
+                  >
+                    {isAllFilteredSelected ? (
+                      <CheckSquare className="w-4 h-4 text-emerald-400" />
+                    ) : isSomeFilteredSelected ? (
+                      <MinusSquare className="w-4 h-4 text-indigo-400" />
+                    ) : (
+                      <Square className="w-4 h-4 opacity-40 hover:opacity-100" />
+                    )}
+                  </button>
+                </th>
+
                 <th
                   onClick={() => handleSort('date')}
                   className="py-2 px-3 cursor-pointer hover:text-slate-200 transition-colors"
@@ -371,14 +546,36 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
                   </div>
                 </th>
 
-                <th className="py-2 px-3 text-right">Rule</th>
+                <th className="py-2 px-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-xs">
               {sorted.map(tx => {
                 const confPct = Math.round(tx.confidenceScore * 100);
+                const isSelected = selectedIds.has(tx.id);
+
                 return (
-                  <tr key={tx.id} className="hover:bg-slate-800/40 transition-colors">
+                  <tr
+                    key={tx.id}
+                    className={`transition-colors ${
+                      isSelected ? 'bg-indigo-950/40 hover:bg-indigo-950/60' : 'hover:bg-slate-800/40'
+                    }`}
+                  >
+                    {/* Row Select Checkbox */}
+                    <td className="py-2.5 px-3">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSelectOne(tx.id)}
+                        className="text-slate-400 hover:text-slate-200 p-0.5 rounded"
+                      >
+                        {isSelected ? (
+                          <CheckSquare className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <Square className="w-4 h-4 opacity-30 hover:opacity-100" />
+                        )}
+                      </button>
+                    </td>
+
                     <td className="py-2.5 px-3 whitespace-nowrap font-mono text-slate-300">
                       {tx.transactionDate}
                     </td>
@@ -387,9 +584,9 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
                       {tx.accountMasked}
                     </td>
 
-                    <td className="py-2.5 px-3 min-w-[220px]">
+                    <td className="py-2.5 px-3 min-w-[200px]">
                       <div className="font-semibold text-slate-200">{tx.cleanPayee}</div>
-                      <div className="font-mono text-[11px] text-slate-500 truncate" title={tx.rawPayee}>
+                      <div className="font-mono text-[11px] text-slate-500 truncate max-w-xs" title={tx.rawPayee}>
                         {tx.rawPayee}
                       </div>
                     </td>
@@ -437,12 +634,38 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
                     </td>
 
                     <td className="py-2.5 px-3 whitespace-nowrap text-right">
-                      <button
-                        onClick={() => onOpenRuleModal(tx.rawPayee, tx.cleanPayee, tx.category)}
-                        className="text-[11px] font-mono text-indigo-400 hover:text-indigo-300 underline"
-                      >
-                        +Rule
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        {/* Edit Button */}
+                        <button
+                          onClick={() => setModalState({ isOpen: true, mode: 'edit', transaction: tx })}
+                          className="p-1 rounded text-slate-400 hover:text-indigo-300 hover:bg-slate-800 transition-colors"
+                          title="Edit transaction"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Single Delete Button */}
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Delete transaction "${tx.cleanPayee}" ($${(Math.abs(tx.amountCents)/100).toFixed(2)})?`)) {
+                              onDeleteTransaction(tx.id);
+                            }
+                          }}
+                          className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                          title="Delete transaction"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Create Rule Shortcut */}
+                        <button
+                          onClick={() => onOpenRuleModal(tx.rawPayee, tx.cleanPayee, tx.category)}
+                          className="text-[11px] font-mono text-indigo-400 hover:text-indigo-300 underline ml-1"
+                          title="Create RE2 rule from merchant"
+                        >
+                          +Rule
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -451,6 +674,18 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Unified Transaction Add / Edit Modal */}
+      <TransactionFormModal
+        isOpen={modalState.isOpen}
+        onClose={() => setModalState(prev => ({ ...prev, isOpen: false }))}
+        mode={modalState.mode}
+        initialTransaction={modalState.transaction}
+        accounts={accounts}
+        categories={categories}
+        onSave={onSaveTransaction}
+        onDelete={onDeleteTransaction}
+      />
     </div>
   );
 };

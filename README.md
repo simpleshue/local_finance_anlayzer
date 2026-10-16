@@ -88,8 +88,15 @@ Transactions are automatically run through a 3-tier classification engine:
 * Click the **"Triage Inbox"** tab in the navigation bar to see only unverified or low-confidence transactions.
 * **Approve Single Transaction**: Click **"Approve"** to accept the proposed category and normalized clean payee.
 * **Change Category**: Use the inline dropdown on any transaction row to pick a different category.
+* **Edit or Delete**: Click the edit (pencil) icon or delete (trash) icon on any triage row.
 * **Batch Approve**: Click the **"Batch Approve All"** button at the top to approve all pending transactions at once.
 * **Switch to "Encrypted Ledger"**: View your complete historical ledger, sort by date, filter by category, or search payees in real-time.
+
+#### Editing, Deleting & Manual Entry in the Encrypted Ledger:
+* **Manual Add**: Click **"+ Add Transaction"** to log cash expenses, manual transfers, or adjustments with custom date, account, flow direction (Expense vs Income), amount, and category.
+* **Edit Transaction**: Click the edit icon on any row to modify merchant names, amounts, categories, dates, or verification status.
+* **Delete Single Transaction**: Click the trash icon on any transaction row to permanently remove it with confirmation.
+* **Bulk Selection & Bulk Delete**: Use row checkboxes to select multiple transactions (or use the header checkbox to select all filtered items). A sticky bulk toolbar appears displaying the count, with options to **"Delete Selected"** or **"Mark Verified"** in a single operation.
 
 ---
 

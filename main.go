@@ -1258,6 +1258,19 @@ func (e *FinanceEngine) handleGetStatus(w http.ResponseWriter, r *http.Request) 
 }
 
 func (e *FinanceEngine) handleGetTransactions(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodDelete {
+		e.handleDeleteTransactions(w, r)
+		return
+	}
+	if r.Method == http.MethodPost || r.Method == http.MethodPut {
+		e.handleSaveTransaction(w, r)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
@@ -1291,6 +1304,88 @@ func (e *FinanceEngine) handleGetTransactions(w http.ResponseWriter, r *http.Req
 	})
 
 	writeJSON(w, http.StatusOK, list)
+}
+
+func (e *FinanceEngine) handleDeleteTransactions(w http.ResponseWriter, r *http.Request) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	var idsToDelete []string
+	if singleID := r.URL.Query().Get("id"); singleID != "" {
+		idsToDelete = append(idsToDelete, singleID)
+	}
+
+	var req struct {
+		IDs []string `json:"ids"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if len(req.IDs) > 0 {
+			idsToDelete = append(idsToDelete, req.IDs...)
+		}
+	}
+
+	if len(idsToDelete) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no transaction id provided"})
+		return
+	}
+
+	deletedCount := 0
+	for _, id := range idsToDelete {
+		if _, exists := e.state.Transactions[id]; exists {
+			delete(e.state.Transactions, id)
+			deletedCount++
+		}
+	}
+
+	if err := e.saveEncryptedStateLocked(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": deletedCount})
+}
+
+func (e *FinanceEngine) handleSaveTransaction(w http.ResponseWriter, r *http.Request) {
+	var tx Transaction
+	if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid transaction payload"})
+		return
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if tx.ID == "" {
+		tx.ID = fmt.Sprintf("%s:MANUAL_%d", tx.AccountID, time.Now().UnixNano())
+	}
+	if tx.ImportedAt.IsZero() {
+		tx.ImportedAt = time.Now()
+	}
+	if tx.CategorizationTier == "" {
+		tx.CategorizationTier = "manual"
+	}
+
+	e.state.Transactions[tx.ID] = tx
+
+	// Also update historical memory if clean payee and category are specified
+	if tx.CleanPayee != "" && tx.Category != "" {
+		normKey := strings.ToUpper(strings.Join(strings.Fields(tx.RawPayee), " "))
+		if normKey == "" {
+			normKey = strings.ToUpper(strings.Join(strings.Fields(tx.CleanPayee), " "))
+		}
+		e.state.HistoryMap[normKey] = HistoryItem{
+			Category:   tx.Category,
+			CleanPayee: tx.CleanPayee,
+		}
+	}
+
+	if err := e.saveEncryptedStateLocked(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, tx)
 }
 
 func (e *FinanceEngine) handleCategorizeTransaction(w http.ResponseWriter, r *http.Request) {

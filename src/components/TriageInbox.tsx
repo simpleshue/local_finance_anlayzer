@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Transaction, DEFAULT_CATEGORIES } from '../types/finance';
-import { Check, ShieldAlert, Sparkles, Plus, Search, CheckCheck, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Check, ShieldAlert, Sparkles, Plus, Search, CheckCheck, ArrowUpDown, ArrowUp, ArrowDown, Edit2, Trash2 } from 'lucide-react';
 
 interface TriageInboxProps {
   transactions: Transaction[];
@@ -8,6 +8,8 @@ interface TriageInboxProps {
   onApprove: (id: string, category: string, cleanPayee: string) => void;
   onOpenRuleModal: (rawPayee: string, cleanPayee: string, currentCategory: string) => void;
   onBatchApproveAll: () => void;
+  onEditTransaction?: (tx: Transaction) => void;
+  onDeleteTransaction?: (id: string) => void;
 }
 
 type TriageSortColumn = 'date' | 'payee' | 'amount' | 'confidence' | 'category';
@@ -18,6 +20,8 @@ export const TriageInbox: React.FC<TriageInboxProps> = ({
   onApprove,
   onOpenRuleModal,
   onBatchApproveAll,
+  onEditTransaction,
+  onDeleteTransaction,
 }) => {
   const [search, setSearch] = useState('');
   const [editingPayees, setEditingPayees] = useState<Record<string, string>>({});
@@ -285,6 +289,30 @@ export const TriageInbox: React.FC<TriageInboxProps> = ({
                           <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                           <span>Approve</span>
                         </button>
+
+                        {onEditTransaction && (
+                          <button
+                            onClick={() => onEditTransaction(tx)}
+                            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-indigo-300 border border-slate-700 transition-colors"
+                            title="Edit transaction details"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                        {onDeleteTransaction && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Delete transaction "${currentPayee}"?`)) {
+                                onDeleteTransaction(tx.id);
+                              }
+                            }}
+                            className="p-1 rounded bg-slate-800 hover:bg-rose-950/50 text-slate-400 hover:text-rose-300 border border-slate-700 transition-colors"
+                            title="Delete transaction"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
 
                         <button
                           onClick={() => onOpenRuleModal(tx.rawPayee, currentPayee, currentCat)}
