@@ -1,0 +1,24 @@
+services:
+  finance-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: finance-engine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - FINANCE_PASSPHRASE=change-me-to-a-very-strong-passphrase
+      - FINANCE_LISTEN=127.0.0.1:8000
+      - FINANCE_HOME=/finances_runtime
+      - FINANCE_CONFIG_DIR=/config
+    cap_add:
+      - IPC_LOCK
+    mem_limit: 512m
+    memswap_limit: 512m
+    volumes:
+      - ./data:/finances_runtime/data
+      - ./config:/config
+    tmpfs:
+      - /finances_runtime/inbox:rw,noexec,nosuid,size=64m
+      - /tmp:rw,noexec,nosuid,size=32m
