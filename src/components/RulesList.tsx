@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import { Rule } from '../types/finance';
-import { Cpu, Plus, Trash2, Search, Sparkles } from 'lucide-react';
+import { Cpu, Plus, Trash2, Edit2, Search, Sparkles } from 'lucide-react';
 
 interface RulesListProps {
   rules: Rule[];
   onOpenCreateRule: () => void;
+  onEditRule: (rule: Rule) => void;
   onDeleteRule: (id: string) => void;
 }
 
 export const RulesList: React.FC<RulesListProps> = ({
   rules = [],
   onOpenCreateRule,
+  onEditRule,
   onDeleteRule,
 }) => {
   const [search, setSearch] = useState('');
@@ -140,13 +142,22 @@ export const RulesList: React.FC<RulesListProps> = ({
                     </td>
 
                     <td className="py-3 px-3 text-right">
-                      <button
-                        onClick={() => onDeleteRule(rule.id)}
-                        className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition-colors"
-                        title="Delete rule"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => onEditRule(rule)}
+                          className="p-1 rounded text-slate-400 hover:text-indigo-300 hover:bg-slate-800 transition-colors"
+                          title="Edit rule"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => onDeleteRule(rule.id)}
+                          className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                          title="Delete rule"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

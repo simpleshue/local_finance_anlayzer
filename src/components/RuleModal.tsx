@@ -9,9 +9,11 @@ interface RuleModalProps {
   rawSample: string;
   initialCleanPayee: string;
   initialCategory: string;
+  initialPattern?: string;
+  editingRuleId?: string;
   transactions: Transaction[];
   categories?: string[];
-  onSaveRule: (pattern: string, category: string, cleanPayee: string, applyHistorical: boolean) => void;
+  onSaveRule: (pattern: string, category: string, cleanPayee: string, applyHistorical: boolean, editingRuleId?: string) => void;
 }
 
 export const RuleModal: React.FC<RuleModalProps> = ({
@@ -20,6 +22,8 @@ export const RuleModal: React.FC<RuleModalProps> = ({
   rawSample,
   initialCleanPayee,
   initialCategory,
+  initialPattern = '',
+  editingRuleId,
   transactions,
   categories = DEFAULT_CATEGORIES,
   onSaveRule,
@@ -34,13 +38,16 @@ export const RuleModal: React.FC<RuleModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      const suggested = rawSample ? generateSuggestedRegex(rawSample) : '(?i)merchant';
-      setPattern(suggested);
+      let chosenPattern = initialPattern;
+      if (!chosenPattern) {
+        chosenPattern = rawSample ? generateSuggestedRegex(rawSample) : '(?i)merchant';
+      }
+      setPattern(chosenPattern);
       setCleanPayee(initialCleanPayee);
       setCategory(initialCategory || 'Dining:Restaurants');
-      testPattern(suggested);
+      testPattern(chosenPattern);
     }
-  }, [isOpen, rawSample, initialCleanPayee, initialCategory]);
+  }, [isOpen, rawSample, initialCleanPayee, initialCategory, initialPattern]);
 
   const testPattern = (pat: string) => {
     if (!pat.trim()) {
@@ -87,7 +94,7 @@ export const RuleModal: React.FC<RuleModalProps> = ({
 
   const handleSave = () => {
     if (regexError || !pattern.trim()) return;
-    onSaveRule(pattern, category, cleanPayee, applyHistorical);
+    onSaveRule(pattern, category, cleanPayee, applyHistorical, editingRuleId);
     onClose();
   };
 
@@ -104,7 +111,7 @@ export const RuleModal: React.FC<RuleModalProps> = ({
             </span>
             <div>
               <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider">
-                View 2: Create Deterministic Regex Rule
+                {editingRuleId ? 'Edit Deterministic Regex Rule' : 'Create Deterministic Regex Rule'}
               </h3>
               <p className="text-[11px] text-slate-400">
                 Go RE2 Linear-Time O(N) Pattern Matcher (ReDoS immune)
@@ -256,7 +263,7 @@ export const RuleModal: React.FC<RuleModalProps> = ({
             className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 transition-colors flex items-center gap-1.5 shadow-sm"
           >
             <Check className="w-3.5 h-3.5" />
-            <span>Save Rule & Reclassify ({matchCount})</span>
+            <span>{editingRuleId ? 'Update Rule' : 'Save Rule'} & Reclassify ({matchCount})</span>
           </button>
         </div>
       </div>

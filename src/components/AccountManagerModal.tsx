@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CreditCard, Building2, Check, Edit2, Plus, ShieldCheck, AlertCircle, FileText, Info } from 'lucide-react';
+import { X, CreditCard, Building2, Check, Edit2, Trash2, Plus, ShieldCheck, AlertCircle, FileText, Info } from 'lucide-react';
 import { Account } from '../types/finance';
 import { generateRandomHex } from '../engine/crypto';
 
@@ -9,6 +9,7 @@ interface AccountManagerModalProps {
   accounts: Record<string, Account>;
   onUpdateAccount: (updatedAccount: Account) => void;
   onAddAccount: (newAccount: Account) => void;
+  onDeleteAccount?: (accountId: string) => void;
 }
 
 export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({
@@ -17,6 +18,7 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({
   accounts,
   onUpdateAccount,
   onAddAccount,
+  onDeleteAccount,
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editInstitution, setEditInstitution] = useState('');
@@ -343,14 +345,29 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => startEditing(acc)}
-                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-700 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 shrink-0"
-                    title="Edit account nickname and details"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                    <span>Edit</span>
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => startEditing(acc)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-700 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5"
+                      title="Edit account nickname and details"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>Edit</span>
+                    </button>
+                    {onDeleteAccount && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Are you sure you want to delete account "${acc.institution} (${acc.maskedDisplay})"? Associated ledger transactions will remain in database with their stored mask.`)) {
+                            onDeleteAccount(acc.id);
+                          }
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-700/60 transition-colors"
+                        title="Delete account"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}

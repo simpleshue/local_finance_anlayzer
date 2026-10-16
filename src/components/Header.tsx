@@ -6,9 +6,6 @@ interface HeaderProps {
   onTabChange: (tab: string) => void;
   needsReviewCount: number;
   totalRecordsCount: number;
-  onOpenIngestion: () => void;
-  onOpenCategoryManager: () => void;
-  onOpenAccountManager: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,9 +13,6 @@ export const Header: React.FC<HeaderProps> = ({
   onTabChange,
   needsReviewCount,
   totalRecordsCount,
-  onOpenIngestion,
-  onOpenCategoryManager,
-  onOpenAccountManager,
 }) => {
   return (
     <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
@@ -60,10 +54,10 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Navigation Bar */}
+      {/* Navigation Bar - All Views as Inline Tabs */}
       <div className="w-full max-w-[1750px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-10 flex overflow-x-auto border-t border-slate-800/80 scrollbar-none">
         <nav className="flex items-center space-x-2 py-2">
-          {/* Triage Inbox */}
+          {/* Tab 1: Triage Inbox */}
           <button
             onClick={() => onTabChange('triage')}
             className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 ${
@@ -81,7 +75,7 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
-          {/* Encrypted Ledger */}
+          {/* Tab 2: Encrypted Ledger */}
           <button
             onClick={() => onTabChange('ledger')}
             className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 ${
@@ -95,7 +89,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="text-slate-500 text-[11px] font-mono">({totalRecordsCount})</span>
           </button>
 
-          {/* RE2 Regex Rules */}
+          {/* Tab 3: RE2 Regex Rules */}
           <button
             onClick={() => onTabChange('rules')}
             className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 ${
@@ -105,40 +99,49 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <Cpu className="w-3.5 h-3.5 text-emerald-400" />
-            <span>RE2 Regex Rules</span>
+            <span>Rules</span>
           </button>
 
-          {/* Action Buttons: Ingest, Categories & Accounts between RE2 Rules and Security */}
-          <div className="flex items-center gap-2 px-2 border-l border-r border-slate-800 shrink-0">
-            <button
-              onClick={onOpenIngestion}
-              className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-slate-950 transition-colors flex items-center gap-1.5 shadow-sm whitespace-nowrap"
-              title="Upload or paste .OFX / .QFX statement text"
-            >
-              <UploadCloud className="w-3.5 h-3.5" />
-              <span>Ingest Statement</span>
-            </button>
+          {/* Tab 4: Ingest Statement (Inline View) */}
+          <button
+            onClick={() => onTabChange('ingest')}
+            className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 ${
+              activeTab === 'ingest'
+                ? 'bg-emerald-600 text-slate-950 font-semibold shadow-sm'
+                : 'text-slate-300 hover:text-slate-100 hover:bg-slate-800/80 bg-slate-800/40 border border-slate-700/60'
+            }`}
+          >
+            <UploadCloud className="w-3.5 h-3.5" />
+            <span>Ingest Statement</span>
+          </button>
 
-            <button
-              onClick={onOpenCategoryManager}
-              className="px-3.5 py-2 rounded-lg text-xs font-medium border bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 transition-colors flex items-center gap-1.5 shadow-sm whitespace-nowrap"
-              title="View, add, rename, or delete categories"
-            >
-              <Tag className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Categories</span>
-            </button>
+          {/* Tab 5: Categories (Inline View) */}
+          <button
+            onClick={() => onTabChange('categories')}
+            className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 ${
+              activeTab === 'categories'
+                ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Tag className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Categories</span>
+          </button>
 
-            <button
-              onClick={onOpenAccountManager}
-              className="px-3.5 py-2 rounded-lg text-xs font-medium border bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 transition-colors flex items-center gap-1.5 shadow-sm whitespace-nowrap"
-              title="Configure account nicknames, institutions, and git privacy"
-            >
-              <Building2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Accounts</span>
-            </button>
-          </div>
+          {/* Tab 6: Accounts (Inline View) */}
+          <button
+            onClick={() => onTabChange('accounts')}
+            className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 ${
+              activeTab === 'accounts'
+                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5 text-teal-400" />
+            <span>Accounts</span>
+          </button>
 
-          {/* Security & Code Auditor */}
+          {/* Tab 7: Security & Code Auditor */}
           <button
             onClick={() => onTabChange('security')}
             className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 ${

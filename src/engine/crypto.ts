@@ -126,28 +126,41 @@ function bytesToHex(bytes: Uint8Array): string {
  * Uses native window.crypto.subtle when available (secure context),
  * and automatically falls back to pure TypeScript when running over HTTP on LAN.
  */
-export async function sha256Hex(data: Uint8Array): Promise<string> {
+export async function sha256Hex(data: Uint8Array | string): Promise<string> {
+  const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
   try {
-    if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle && window.crypto.subtle.digest) {
-      const hashBuf = await window.crypto.subtle.digest('SHA-256', data as ArrayBufferView<ArrayBuffer>);
+    if (
+      typeof window !== 'undefined' &&
+      window.crypto &&
+      window.crypto.subtle &&
+      typeof window.crypto.subtle.digest === 'function'
+    ) {
+      const hashBuf = await window.crypto.subtle.digest('SHA-256', bytes as ArrayBufferView<ArrayBuffer>);
       return bytesToHex(new Uint8Array(hashBuf));
     }
   } catch {
     // Fallback directly to pure TS implementation
   }
-  return bytesToHex(pureSha256Bytes(data));
+  return bytesToHex(pureSha256Bytes(bytes));
 }
 
 /**
  * Computes HMAC-SHA256 signature in hexadecimal.
  * Uses native window.crypto.subtle when available, with pure TS fallback for HTTP LAN access.
  */
-export async function hmacSha256(keyStr: string, data: Uint8Array): Promise<string> {
+export async function hmacSha256(keyStr: string, data: Uint8Array | string): Promise<string> {
   const enc = new TextEncoder();
   const keyBytes = enc.encode(keyStr);
+  const messageBytes = typeof data === 'string' ? enc.encode(data) : data;
 
   try {
-    if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle && window.crypto.subtle.importKey && window.crypto.subtle.sign) {
+    if (
+      typeof window !== 'undefined' &&
+      window.crypto &&
+      window.crypto.subtle &&
+      typeof window.crypto.subtle.importKey === 'function' &&
+      typeof window.crypto.subtle.sign === 'function'
+    ) {
       const key = await window.crypto.subtle.importKey(
         'raw',
         keyBytes,
@@ -155,14 +168,14 @@ export async function hmacSha256(keyStr: string, data: Uint8Array): Promise<stri
         false,
         ['sign']
       );
-      const signature = await window.crypto.subtle.sign('HMAC', key, data as ArrayBufferView<ArrayBuffer>);
+      const signature = await window.crypto.subtle.sign('HMAC', key, messageBytes as ArrayBufferView<ArrayBuffer>);
       return bytesToHex(new Uint8Array(signature));
     }
   } catch {
     // Fallback directly to pure TS implementation
   }
 
-  return bytesToHex(pureHmacSha256Bytes(keyBytes, data));
+  return bytesToHex(pureHmacSha256Bytes(keyBytes, messageBytes));
 }
 
 export function maskAccountNumber(rawAcct: string): string {

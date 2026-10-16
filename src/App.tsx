@@ -23,6 +23,7 @@ import { categorizeTransaction } from './engine/categorizer';
 import { sha256Hex, hmacSha256, maskAccountNumber } from './engine/crypto';
 import { Header } from './components/Header';
 import { IngestionModal } from './components/IngestionModal';
+import { IngestionView } from './components/IngestionView';
 import { TelemetrySidebar } from './components/TelemetrySidebar';
 import { TriageInbox } from './components/TriageInbox';
 import { LedgerView } from './components/LedgerView';
@@ -30,12 +31,16 @@ import { RulesList } from './components/RulesList';
 import { RuleModal } from './components/RuleModal';
 import { SecurityConsole } from './components/SecurityConsole';
 import { CategoryManagerModal } from './components/CategoryManagerModal';
+import { CategoryManagerView } from './components/CategoryManagerView';
 import { AccountManagerModal } from './components/AccountManagerModal';
+import { AccountManagerView } from './components/AccountManagerView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { TransactionFormModal } from './components/TransactionFormModal';
 
+export type TabType = 'triage' | 'ledger' | 'rules' | 'ingest' | 'categories' | 'accounts' | 'security';
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'triage' | 'ledger' | 'rules' | 'security'>('triage');
+  const [activeTab, setActiveTab] = useState<TabType>('triage');
   const [passphrase, setPassphrase] = useState('local-airgap-vault-master-key-2026');
 
   // Ledger state
@@ -136,17 +141,21 @@ export default function App() {
     return () => { mounted = false; };
   }, []);
 
-  // Modal State for Rule Generation
+  // Modal State for Rule Generation / Editing
   const [ruleModalState, setRuleModalState] = useState<{
     isOpen: boolean;
     rawSample: string;
     cleanPayee: string;
     currentCategory: string;
+    initialPattern?: string;
+    editingRuleId?: string;
   }>({
     isOpen: false,
     rawSample: '',
     cleanPayee: '',
     currentCategory: '',
+    initialPattern: '',
+    editingRuleId: undefined,
   });
 
   // Telemetry computations
@@ -456,23 +465,32 @@ export default function App() {
     setHistoryMap(updatedHistory);
   };
 
-  // Save New RE2 Regex Rule (View 2)
+  // Save or Update RE2 Regex Rule
   const handleSaveRule = (
     pattern: string,
     category: string,
     cleanPayee: string,
-    applyHistorical: boolean
+    applyHistorical: boolean,
+    editingRuleId?: string
   ) => {
-    const newRule: Rule = {
-      id: `rule-${Date.now()}`,
-      pattern,
-      category,
-      cleanPayee: cleanPayee.trim() || undefined,
-      createdAt: new Date().toISOString(),
-    };
-
-    // Prepend rule so newly created rules have highest priority
-    setRules(prev => [newRule, ...prev]);
+    if (editingRuleId) {
+      setRules(prev =>
+        prev.map(r =>
+          r.id === editingRuleId
+            ? { ...r, pattern, category, cleanPayee: cleanPayee.trim() }
+            : r
+        )
+      );
+    } else {
+      const newRule: Rule = {
+        id: `rule-${Date.now()}`,
+        pattern,
+        category,
+        cleanPayee: cleanPayee.trim() || undefined,
+        createdAt: new Date().toISOString(),
+      };
+      setRules(prev => [newRule, ...prev]);
+    }
 
     // Sync with Go backend if available
     try {
@@ -480,6 +498,7 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: editingRuleId,
           pattern,
           category,
           clean_payee: cleanPayee.trim(),
@@ -521,8 +540,13 @@ export default function App() {
     }
   };
 
-  const handleDeleteRule = (id: string) => {
+  const handleDeleteRule = async (id: string) => {
     setRules(prev => prev.filter(r => r.id !== id));
+    try {
+      await fetch(`/api/rules/delete?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch {
+      // offline
+    }
   };
 
   const handleOpenRuleModal = (rawPayee: string, cleanPayee: string, currentCategory: string) => {
@@ -531,7 +555,35 @@ export default function App() {
       rawSample: rawPayee,
       cleanPayee,
       currentCategory,
+      initialPattern: '',
+      editingRuleId: undefined,
     });
+  };
+
+  const handleOpenEditRule = (rule: Rule) => {
+    setRuleModalState({
+      isOpen: true,
+      rawSample: '',
+      cleanPayee: rule.cleanPayee || '',
+      currentCategory: rule.category,
+      initialPattern: rule.pattern,
+      editingRuleId: rule.id,
+    });
+  };
+
+  const handleDeleteAccount = async (id: string) => {
+    setAccounts(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    try {
+      await fetch(`/api/accounts?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+    } catch {
+      // Offline fallback
+    }
   };
 
   const handleUpdateAccount = async (updated: Account) => {
@@ -672,9 +724,6 @@ export default function App() {
         onTabChange={tab => setActiveTab(tab as any)}
         needsReviewCount={needsReviewCount}
         totalRecordsCount={transactions.length}
-        onOpenIngestion={() => setIsIngestionOpen(true)}
-        onOpenCategoryManager={() => setIsCategoryManagerOpen(true)}
-        onOpenAccountManager={() => setIsAccountManagerOpen(true)}
       />
 
       <main className="w-full max-w-[1750px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-10 py-6">
@@ -704,7 +753,7 @@ export default function App() {
                   accounts={accounts}
                   categories={categories}
                   onOpenRuleModal={handleOpenRuleModal}
-                  onOpenCategoryManager={() => setIsCategoryManagerOpen(true)}
+                  onOpenCategoryManager={() => setActiveTab('categories')}
                   onUpdateTransactionCategory={handleUpdateTransactionCategory}
                   onSaveTransaction={handleSaveTransaction}
                   onDeleteTransaction={handleDeleteTransaction}
@@ -714,18 +763,56 @@ export default function App() {
               </ErrorBoundary>
             )}
 
-            {/* Tab 3: RE2 Regex Rules List */}
+            {/* Tab 3: Rules & Classification Patterns */}
             {activeTab === 'rules' && (
-              <ErrorBoundary fallbackTitle="RE2 Regex Rules View Error">
+              <ErrorBoundary fallbackTitle="Rules View Error">
                 <RulesList
                   rules={rules}
                   onOpenCreateRule={() => handleOpenRuleModal('', '', categories[0] || 'Groceries')}
+                  onEditRule={handleOpenEditRule}
                   onDeleteRule={handleDeleteRule}
                 />
               </ErrorBoundary>
             )}
 
-            {/* Tab 4: Security Console & Architecture Matrix */}
+            {/* Tab 4: Ingest Statement (Inline View - Stays in Place) */}
+            {activeTab === 'ingest' && (
+              <ErrorBoundary fallbackTitle="Statement Ingestion View Error">
+                <IngestionView
+                  onIngestStatement={handleIngestStatement}
+                  lastIngestResult={lastIngestResult}
+                  memoryEvents={memoryEvents}
+                />
+              </ErrorBoundary>
+            )}
+
+            {/* Tab 5: Categories (Inline View - Stays in Place) */}
+            {activeTab === 'categories' && (
+              <ErrorBoundary fallbackTitle="Category Manager View Error">
+                <CategoryManagerView
+                  categories={categories}
+                  transactions={transactions}
+                  rules={rules}
+                  onAddCategory={handleAddCategory}
+                  onRenameCategory={handleRenameCategory}
+                  onDeleteCategory={handleDeleteCategory}
+                />
+              </ErrorBoundary>
+            )}
+
+            {/* Tab 6: Accounts (Inline View - Stays in Place) */}
+            {activeTab === 'accounts' && (
+              <ErrorBoundary fallbackTitle="Account Manager View Error">
+                <AccountManagerView
+                  accounts={accounts}
+                  onUpdateAccount={handleUpdateAccount}
+                  onAddAccount={handleAddAccount}
+                  onDeleteAccount={handleDeleteAccount}
+                />
+              </ErrorBoundary>
+            )}
+
+            {/* Tab 7: Security Console & Architecture Matrix */}
             {activeTab === 'security' && (
               <ErrorBoundary fallbackTitle="Security Console View Error">
                 <SecurityConsole
@@ -749,47 +836,63 @@ export default function App() {
         </div>
       </main>
 
-      {/* View 0: Statement Ingestion Modal (Opened on click) */}
-      <IngestionModal
-        isOpen={isIngestionOpen}
-        onClose={() => setIsIngestionOpen(false)}
-        onIngestStatement={handleIngestStatement}
-        lastIngestResult={lastIngestResult}
-        memoryEvents={memoryEvents}
-      />
+      {/* Optional Ingestion Modal for Quick Launch if Triggered */}
+      {isIngestionOpen && (
+        <IngestionModal
+          isOpen={isIngestionOpen}
+          onClose={() => setIsIngestionOpen(false)}
+          onIngestStatement={handleIngestStatement}
+          lastIngestResult={lastIngestResult}
+          memoryEvents={memoryEvents}
+        />
+      )}
 
-      {/* View 2: "Create Rule From Pattern" Modal */}
+      {/* "Create / Edit Rule From Pattern" Modal */}
       <RuleModal
         isOpen={ruleModalState.isOpen}
-        onClose={() => setRuleModalState(prev => ({ ...prev, isOpen: false }))}
+        onClose={() =>
+          setRuleModalState(prev => ({
+            ...prev,
+            isOpen: false,
+            initialPattern: '',
+            editingRuleId: undefined,
+          }))
+        }
         rawSample={ruleModalState.rawSample}
         initialCleanPayee={ruleModalState.cleanPayee}
         initialCategory={ruleModalState.currentCategory}
+        initialPattern={ruleModalState.initialPattern}
+        editingRuleId={ruleModalState.editingRuleId}
         transactions={transactions}
         categories={categories}
         onSaveRule={handleSaveRule}
       />
 
-      {/* Category Manager Modal */}
-      <CategoryManagerModal
-        isOpen={isCategoryManagerOpen}
-        onClose={() => setIsCategoryManagerOpen(false)}
-        categories={categories}
-        transactions={transactions}
-        rules={rules}
-        onAddCategory={handleAddCategory}
-        onRenameCategory={handleRenameCategory}
-        onDeleteCategory={handleDeleteCategory}
-      />
+      {/* Category Manager Modal if triggered externally */}
+      {isCategoryManagerOpen && (
+        <CategoryManagerModal
+          isOpen={isCategoryManagerOpen}
+          onClose={() => setIsCategoryManagerOpen(false)}
+          categories={categories}
+          transactions={transactions}
+          rules={rules}
+          onAddCategory={handleAddCategory}
+          onRenameCategory={handleRenameCategory}
+          onDeleteCategory={handleDeleteCategory}
+        />
+      )}
 
-      {/* Account Manager Modal */}
-      <AccountManagerModal
-        isOpen={isAccountManagerOpen}
-        onClose={() => setIsAccountManagerOpen(false)}
-        accounts={accounts}
-        onUpdateAccount={handleUpdateAccount}
-        onAddAccount={handleAddAccount}
-      />
+      {/* Account Manager Modal if triggered externally */}
+      {isAccountManagerOpen && (
+        <AccountManagerModal
+          isOpen={isAccountManagerOpen}
+          onClose={() => setIsAccountManagerOpen(false)}
+          accounts={accounts}
+          onUpdateAccount={handleUpdateAccount}
+          onAddAccount={handleAddAccount}
+          onDeleteAccount={handleDeleteAccount}
+        />
+      )}
 
       {/* Transaction Edit Modal for Triage Inbox */}
       {editingTxFromTriage && (

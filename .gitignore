@@ -1,22 +1,30 @@
 node_modules/
 build/
+dist/
 coverage/
 .DS_Store
 *.log
 .env*
 !.env.example
 
-# Sensitive user configs & personal account mappings (skipped from GitHub)
+# Sensitive user configurations & personal mappings
+# Protected from git overwrite during `git pull` from GitHub
 config/accounts.json
+config/rules.json
+config/categories.json
+config/config.json
 accounts.json
-!config/accounts.json.example
+rules.json
+categories.json
+!config/*.example
 
-# Local encrypted database and statement files (root-level only)
+# Local encrypted database and volatile statement files (root-level only)
 /data/
 /inbox/
 /archive/
 /finances_runtime/
 *.db
+*.enc
 *.tmp
 
 # Ensure all source code is always tracked by Git
