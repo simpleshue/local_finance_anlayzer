@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { CreditCard, Building2, Check, Edit2, Trash2, Plus, ShieldCheck, AlertCircle, FileText, Info, Search } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { CreditCard, Building2, Check, Edit2, Trash2, Plus, ShieldCheck, AlertCircle, FileText, Info, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Account } from '../types/finance';
 import { generateRandomHex } from '../engine/crypto';
 
@@ -9,6 +9,8 @@ interface AccountManagerViewProps {
   onAddAccount: (newAccount: Account) => void;
   onDeleteAccount: (accountId: string) => void;
 }
+
+type AccountSortColumn = 'institution' | 'description' | 'type' | 'id';
 
 export const AccountManagerView: React.FC<AccountManagerViewProps> = ({
   accounts,
@@ -30,7 +32,38 @@ export const AccountManagerView: React.FC<AccountManagerViewProps> = ({
   const [newType, setNewType] = useState<Account['type']>('checking');
   const [newDescription, setNewDescription] = useState('');
 
-  const accountList = Object.values(accounts);
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<AccountSortColumn>('institution');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (col: AccountSortColumn) => {
+    if (sortColumn === col) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(col);
+      setSortDirection('asc');
+    }
+  };
+
+  const accountList = useMemo(() => {
+    const list = Object.values(accounts);
+    return [...list].sort((a, b) => {
+      let cmp = 0;
+      if (sortColumn === 'institution') {
+        cmp = (a.institution || '').localeCompare(b.institution || '', undefined, { sensitivity: 'base' });
+        if (cmp === 0) {
+          cmp = (a.maskedDisplay || '').localeCompare(b.maskedDisplay || '');
+        }
+      } else if (sortColumn === 'description') {
+        cmp = (a.description || '').localeCompare(b.description || '', undefined, { sensitivity: 'base' });
+      } else if (sortColumn === 'type') {
+        cmp = (a.type || '').localeCompare(b.type || '', undefined, { sensitivity: 'base' });
+      } else if (sortColumn === 'id') {
+        cmp = (a.id || '').localeCompare(b.id || '');
+      }
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [accounts, sortColumn, sortDirection]);
 
   const startEditing = (acc: Account) => {
     setEditingId(acc.id);
@@ -215,11 +248,59 @@ export const AccountManagerView: React.FC<AccountManagerViewProps> = ({
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="border-b border-slate-800 text-[11px] font-mono text-slate-400 uppercase tracking-wider">
-              <th className="py-2.5 px-3">Institution & Mask</th>
-              <th className="py-2.5 px-3">Friendly Nickname</th>
-              <th className="py-2.5 px-3">Type</th>
-              <th className="py-2.5 px-3">Cryptographic Key (HMAC ID)</th>
+            <tr className="border-b border-slate-800 text-[11px] font-mono text-slate-400 uppercase tracking-wider select-none">
+              <th
+                onClick={() => handleSort('institution')}
+                className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Institution & Mask</span>
+                  {sortColumn === 'institution' ? (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort('description')}
+                className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Friendly Nickname</span>
+                  {sortColumn === 'description' ? (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort('type')}
+                className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Type</span>
+                  {sortColumn === 'type' ? (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort('id')}
+                className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Cryptographic Key (HMAC ID)</span>
+                  {sortColumn === 'id' ? (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
+                  )}
+                </div>
+              </th>
               <th className="py-2.5 px-3 text-right">Actions</th>
             </tr>
           </thead>

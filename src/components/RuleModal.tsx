@@ -167,11 +167,13 @@ export const RuleModal: React.FC<RuleModalProps> = ({
                 onChange={e => setCategory(e.target.value)}
                 className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500"
               >
-                {categories.map(c => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
+                {[...categories]
+                  .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+                  .map(c => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
               </select>
             </div>
 

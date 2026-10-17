@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Rule } from '../types/finance';
-import { Cpu, Plus, Trash2, Edit2, Search, Sparkles } from 'lucide-react';
+import { Cpu, Plus, Trash2, Edit2, Search, Sparkles, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 interface RulesListProps {
   rules: Rule[];
@@ -9,6 +9,8 @@ interface RulesListProps {
   onDeleteRule: (id: string) => void;
 }
 
+type RuleSortColumn = 'pattern' | 'category' | 'cleanPayee' | 'created';
+
 export const RulesList: React.FC<RulesListProps> = ({
   rules = [],
   onOpenCreateRule,
@@ -16,8 +18,29 @@ export const RulesList: React.FC<RulesListProps> = ({
   onDeleteRule,
 }) => {
   const [search, setSearch] = useState('');
+  const [sortColumn, setSortColumn] = useState<RuleSortColumn>('category');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const safeRules = Array.isArray(rules) ? rules : [];
+
+  const formatRuleDate = (rule: Rule): string => {
+    const raw = rule.createdAt || (rule as any).created_at;
+    if (!raw) return 'Built-in Rule';
+    if (typeof raw === 'string') {
+      if (raw.startsWith('0001-')) return 'Built-in Rule';
+      return raw.includes('T') ? raw.split('T')[0] : raw;
+    }
+    return 'Built-in Rule';
+  };
+
+  const handleSort = (col: RuleSortColumn) => {
+    if (sortColumn === col) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(col);
+      setSortDirection(col === 'created' ? 'desc' : 'asc');
+    }
+  };
 
   const filtered = safeRules.filter(r => {
     if (!r) return false;
@@ -29,15 +52,26 @@ export const RulesList: React.FC<RulesListProps> = ({
     return pattern.includes(q) || category.includes(q) || cleanPayee.includes(q);
   });
 
-  const formatRuleDate = (rule: Rule): string => {
-    const raw = rule.createdAt || (rule as any).created_at;
-    if (!raw) return 'Built-in Rule';
-    if (typeof raw === 'string') {
-      if (raw.startsWith('0001-')) return 'Built-in Rule';
-      return raw.includes('T') ? raw.split('T')[0] : raw;
-    }
-    return 'Built-in Rule';
-  };
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      const cleanA = (a.cleanPayee || (a as any).clean_payee || '').toString();
+      const cleanB = (b.cleanPayee || (b as any).clean_payee || '').toString();
+      if (sortColumn === 'pattern') {
+        cmp = (a.pattern || '').localeCompare(b.pattern || '', undefined, { sensitivity: 'base' });
+      } else if (sortColumn === 'category') {
+        cmp = (a.category || '').localeCompare(b.category || '', undefined, { sensitivity: 'base' });
+      } else if (sortColumn === 'cleanPayee') {
+        cmp = cleanA.localeCompare(cleanB, undefined, { sensitivity: 'base' });
+      } else if (sortColumn === 'created') {
+        cmp = formatRuleDate(a).localeCompare(formatRuleDate(b));
+      }
+      if (cmp === 0) {
+        cmp = (a.pattern || '').localeCompare(b.pattern || '', undefined, { sensitivity: 'base' });
+      }
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [filtered, sortColumn, sortDirection]);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
@@ -83,7 +117,7 @@ export const RulesList: React.FC<RulesListProps> = ({
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {sorted.length === 0 ? (
         <div className="p-12 text-center space-y-3">
           <div className="w-12 h-12 mx-auto rounded-full bg-slate-800 flex items-center justify-center text-slate-500">
             <Sparkles className="w-6 h-6" />
@@ -108,16 +142,64 @@ export const RulesList: React.FC<RulesListProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-800 text-[11px] font-mono text-slate-400 uppercase tracking-wider">
-                <th className="py-2.5 px-3">Go RE2 Pattern</th>
-                <th className="py-2.5 px-3">Target Category</th>
-                <th className="py-2.5 px-3">Normalized Clean Payee</th>
-                <th className="py-2.5 px-3">Created</th>
+              <tr className="border-b border-slate-800 text-[11px] font-mono text-slate-400 uppercase tracking-wider select-none">
+                <th
+                  onClick={() => handleSort('pattern')}
+                  className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Go RE2 Pattern</span>
+                    {sortColumn === 'pattern' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 opacity-30" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('category')}
+                  className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Target Category</span>
+                    {sortColumn === 'category' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 opacity-30" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('cleanPayee')}
+                  className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Normalized Clean Payee</span>
+                    {sortColumn === 'cleanPayee' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 opacity-30" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('created')}
+                  className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Created</span>
+                    {sortColumn === 'created' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 opacity-30" />
+                    )}
+                  </div>
+                </th>
                 <th className="py-2.5 px-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-xs font-mono">
-              {filtered.map(rule => {
+              {sorted.map(rule => {
                 const cleanPayee = rule.cleanPayee || (rule as any).clean_payee;
                 return (
                   <tr key={rule.id} className="hover:bg-slate-800/40 transition-colors">
