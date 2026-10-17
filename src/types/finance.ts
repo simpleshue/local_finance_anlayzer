@@ -60,15 +60,5 @@ export interface MemoryZeroEvent {
   status: 'WIPED_OK';
 }
 
-import categoriesData from '../../config/categories.json.example';
-
-export interface CategoryItem {
-  id: string;
-  name: string;
-  parent: string | null;
-  description?: string;
-}
-
-export const CATEGORIES_CONFIG: CategoryItem[] = categoriesData as CategoryItem[];
-export const DEFAULT_CATEGORIES: string[] = categoriesData.map(c => c.name);
+export * from '../constants/defaultCategories';
 
