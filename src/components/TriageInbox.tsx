@@ -88,12 +88,12 @@ const SearchableCategorySelect: React.FC<SearchableCategorySelectProps> = ({
   };
 
   return (
-    <div ref={containerRef} className="relative min-w-[190px]">
+    <div ref={containerRef} className="relative w-full">
       {!isOpen ? (
         <button
           type="button"
           onClick={handleOpen}
-          className="w-full flex items-center justify-between gap-2 bg-slate-950 border border-slate-700 hover:border-indigo-500 text-slate-200 rounded px-2.5 py-1 text-xs font-medium focus:outline-none focus:border-indigo-500 cursor-pointer text-left transition-colors"
+          className="w-full flex items-center justify-between gap-1.5 bg-slate-950 border border-slate-700 hover:border-indigo-500 text-slate-200 rounded px-2 py-1 text-xs font-medium focus:outline-none focus:border-indigo-500 cursor-pointer text-left transition-colors"
           title="Click to select or type to filter categories"
         >
           <span className="truncate">{value}</span>
@@ -111,7 +111,7 @@ const SearchableCategorySelect: React.FC<SearchableCategorySelectProps> = ({
             }}
             onKeyDown={handleKeyDown}
             placeholder={value || 'Type to filter...'}
-            className="w-full bg-slate-950 border border-indigo-500 text-slate-100 rounded px-2.5 py-1 pr-6 text-xs font-mono placeholder-slate-400 focus:outline-none"
+            className="w-full bg-slate-950 border border-indigo-500 text-slate-100 rounded px-2 py-1 pr-6 text-xs font-mono placeholder-slate-400 focus:outline-none"
           />
           <button
             type="button"
@@ -127,7 +127,7 @@ const SearchableCategorySelect: React.FC<SearchableCategorySelectProps> = ({
       )}
 
       {isOpen && (
-        <div className="absolute z-50 left-0 mt-1 w-64 max-h-56 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg shadow-2xl py-1 text-xs">
+        <div className="absolute z-50 right-0 sm:left-0 mt-1 w-60 max-h-56 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg shadow-2xl py-1 text-xs">
           {filteredCategories.length === 0 ? (
             <div className="px-3 py-2 text-slate-500 font-mono text-[11px]">
               No matching category for "{filterText}"
@@ -261,9 +261,9 @@ export const TriageInbox: React.FC<TriageInboxProps> = ({
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 shadow-lg flex flex-col">
       {/* Header and Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-3 border-b border-slate-800 shrink-0">
         <div>
           <div className="flex items-center gap-2">
             <span className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
@@ -307,7 +307,7 @@ export const TriageInbox: React.FC<TriageInboxProps> = ({
         </div>
       </div>
 
-      {/* Table */}
+      {/* Auto-fitting Viewport Table */}
       {filtered.length === 0 ? (
         <div className="text-center py-12 px-4">
           <div className="w-12 h-12 mx-auto rounded-full bg-emerald-950/40 border border-emerald-800/40 flex items-center justify-center text-emerald-400 mb-3">
@@ -320,81 +320,81 @@ export const TriageInbox: React.FC<TriageInboxProps> = ({
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto pb-24">
-          <table className="w-full text-left border-collapse">
-            <thead>
+        <div className="w-full max-h-[calc(100vh-225px)] overflow-y-auto overflow-x-auto pb-16">
+          <table className="w-full table-fixed text-left border-collapse">
+            <thead className="sticky top-0 z-20 bg-slate-900 shadow-xs">
               <tr className="border-b border-slate-800 text-[11px] font-mono text-slate-400 uppercase tracking-wider select-none">
                 <th
                   onClick={() => handleSort('date')}
-                  className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+                  className="w-[130px] py-2.5 px-2.5 cursor-pointer hover:text-slate-200 transition-colors"
                 >
-                  <div className="flex items-center gap-1.5">
-                    <span>Date / Account</span>
+                  <div className="flex items-center gap-1">
+                    <span className="truncate">Date / Account</span>
                     {sortColumn === 'date' ? (
-                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400 shrink-0" /> : <ArrowDown className="w-3 h-3 text-emerald-400 shrink-0" />
                     ) : (
-                      <ArrowUpDown className="w-3 h-3 opacity-30" />
+                      <ArrowUpDown className="w-3 h-3 opacity-30 shrink-0" />
                     )}
                   </div>
                 </th>
 
                 <th
                   onClick={() => handleSort('payee')}
-                  className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+                  className="w-auto py-2.5 px-2.5 cursor-pointer hover:text-slate-200 transition-colors"
                 >
-                  <div className="flex items-center gap-1.5">
-                    <span>Raw Bank Payee & Normalized Display</span>
+                  <div className="flex items-center gap-1">
+                    <span className="truncate">Raw Bank Payee & Display</span>
                     {sortColumn === 'payee' ? (
-                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400 shrink-0" /> : <ArrowDown className="w-3 h-3 text-emerald-400 shrink-0" />
                     ) : (
-                      <ArrowUpDown className="w-3 h-3 opacity-30" />
+                      <ArrowUpDown className="w-3 h-3 opacity-30 shrink-0" />
                     )}
                   </div>
                 </th>
 
                 <th
                   onClick={() => handleSort('amount')}
-                  className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+                  className="w-[95px] py-2.5 px-2.5 cursor-pointer hover:text-slate-200 transition-colors"
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
                     <span>Amount</span>
                     {sortColumn === 'amount' ? (
-                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400 shrink-0" /> : <ArrowDown className="w-3 h-3 text-emerald-400 shrink-0" />
                     ) : (
-                      <ArrowUpDown className="w-3 h-3 opacity-30" />
+                      <ArrowUpDown className="w-3 h-3 opacity-30 shrink-0" />
                     )}
                   </div>
                 </th>
 
                 <th
                   onClick={() => handleSort('confidence')}
-                  className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+                  className="w-[115px] py-2.5 px-2.5 cursor-pointer hover:text-slate-200 transition-colors"
                 >
-                  <div className="flex items-center gap-1.5">
-                    <span>Confidence & Tier</span>
+                  <div className="flex items-center gap-1">
+                    <span className="truncate">Tier / Conf</span>
                     {sortColumn === 'confidence' ? (
-                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400 shrink-0" /> : <ArrowDown className="w-3 h-3 text-emerald-400 shrink-0" />
                     ) : (
-                      <ArrowUpDown className="w-3 h-3 opacity-30" />
+                      <ArrowUpDown className="w-3 h-3 opacity-30 shrink-0" />
                     )}
                   </div>
                 </th>
 
                 <th
                   onClick={() => handleSort('category')}
-                  className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+                  className="w-[185px] xl:w-[220px] py-2.5 px-2.5 cursor-pointer hover:text-slate-200 transition-colors"
                 >
-                  <div className="flex items-center gap-1.5">
-                    <span>Category Override</span>
+                  <div className="flex items-center gap-1">
+                    <span className="truncate">Category Override</span>
                     {sortColumn === 'category' ? (
-                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400 shrink-0" /> : <ArrowDown className="w-3 h-3 text-emerald-400 shrink-0" />
                     ) : (
-                      <ArrowUpDown className="w-3 h-3 opacity-30" />
+                      <ArrowUpDown className="w-3 h-3 opacity-30 shrink-0" />
                     )}
                   </div>
                 </th>
 
-                <th className="py-2.5 px-3 text-right">Actions</th>
+                <th className="w-[180px] py-2.5 px-2.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-xs">
@@ -408,10 +408,10 @@ export const TriageInbox: React.FC<TriageInboxProps> = ({
                 return (
                   <tr key={tx.id} className="hover:bg-slate-800/40 transition-colors">
                     {/* Date & Account Name */}
-                    <td className="py-3 px-3 whitespace-nowrap">
+                    <td className="py-2.5 px-2.5 whitespace-nowrap overflow-hidden">
                       <div className="font-mono text-slate-200">{tx.transactionDate}</div>
                       <div
-                        className="text-[11px] font-medium text-indigo-300 mt-0.5"
+                        className="text-[11px] font-medium text-indigo-300 mt-0.5 truncate"
                         title={`${accountName} (${tx.accountMasked})`}
                       >
                         {accountName}
@@ -419,12 +419,12 @@ export const TriageInbox: React.FC<TriageInboxProps> = ({
                     </td>
 
                     {/* Payee */}
-                    <td className="py-3 px-3 min-w-[220px]">
+                    <td className="py-2.5 px-2.5 min-w-0 overflow-hidden">
                       <input
                         type="text"
                         value={currentPayee}
                         onChange={e => handleCleanPayeeChange(tx.id, e.target.value)}
-                        className="w-full font-semibold text-slate-100 bg-transparent hover:bg-slate-950 focus:bg-slate-950 px-2 py-0.5 rounded border border-transparent hover:border-slate-700 focus:border-indigo-500 focus:outline-none transition-colors"
+                        className="w-full font-semibold text-slate-100 bg-transparent hover:bg-slate-950 focus:bg-slate-950 px-2 py-0.5 rounded border border-transparent hover:border-slate-700 focus:border-indigo-500 focus:outline-none transition-colors truncate"
                         title="Click to rename display merchant"
                       />
                       <div className="font-mono text-[11px] text-slate-400 px-2 truncate mt-0.5" title={tx.rawPayee}>
@@ -433,7 +433,7 @@ export const TriageInbox: React.FC<TriageInboxProps> = ({
                     </td>
 
                     {/* Amount */}
-                    <td className="py-3 px-3 whitespace-nowrap font-mono font-medium">
+                    <td className="py-2.5 px-2.5 whitespace-nowrap font-mono font-medium">
                       <span className={tx.amountCents < 0 ? 'text-slate-200' : 'text-emerald-400'}>
                         {tx.amountCents < 0 ? '-' : '+'}
                         ${(Math.abs(tx.amountCents) / 100).toFixed(2)}
@@ -441,15 +441,15 @@ export const TriageInbox: React.FC<TriageInboxProps> = ({
                     </td>
 
                     {/* Confidence & Tier */}
-                    <td className="py-3 px-3 whitespace-nowrap">
-                      <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-mono bg-amber-950/60 text-amber-300 border border-amber-800/60">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                        <span>{tx.categorizationTier} ({confPct}%)</span>
+                    <td className="py-2.5 px-2.5 whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono bg-amber-950/60 text-amber-300 border border-amber-800/60">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                        <span className="truncate">{tx.categorizationTier} ({confPct}%)</span>
                       </div>
                     </td>
 
                     {/* Searchable & Sorted Category Selector */}
-                    <td className="py-3 px-3 whitespace-nowrap">
+                    <td className="py-2.5 px-2.5">
                       <SearchableCategorySelect
                         value={currentCat}
                         categories={categories}

@@ -48,6 +48,7 @@ export default function App() {
     [INITIAL_ACCOUNT.id]: INITIAL_ACCOUNT,
   });
 
+  const [appName, setAppName] = useState<string>('Zero-Leak Local Finance Engine');
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [rules, setRules] = useState<Rule[]>(STARTER_RULES);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
@@ -76,6 +77,10 @@ export default function App() {
         const statusRes = await fetch('/api/status');
         if (statusRes.ok && mounted) {
           const status = await statusRes.json();
+          if (typeof status.app_name === 'string' && status.app_name.trim()) {
+            setAppName(status.app_name.trim());
+            document.title = status.app_name.trim();
+          }
           if (Array.isArray(status.categories) && status.categories.length > 0) {
             setCategories(status.categories);
           }
@@ -145,6 +150,10 @@ export default function App() {
       const statusRes = await fetch('/api/status');
       if (statusRes.ok) {
         const status = await statusRes.json();
+        if (typeof status.app_name === 'string' && status.app_name.trim()) {
+          setAppName(status.app_name.trim());
+          document.title = status.app_name.trim();
+        }
         if (Array.isArray(status.categories) && status.categories.length > 0) {
           setCategories(status.categories);
         }
@@ -834,16 +843,17 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
       {/* Header */}
       <Header
+        appName={appName}
         activeTab={activeTab}
         onTabChange={tab => setActiveTab(tab as any)}
         needsReviewCount={needsReviewCount}
         totalRecordsCount={transactions.length}
       />
 
-      <main className="w-full max-w-[1750px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-10 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Main Views Container (8 cols on lg, 9 cols on xl/2xl) */}
-          <div className="lg:col-span-8 xl:col-span-9 2xl:col-span-9 space-y-6 w-full min-w-0">
+      <main className="w-full px-3 sm:px-6 lg:px-8 py-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* Main Views Container (9 cols on lg/xl, 10 cols on 2xl) */}
+          <div className="lg:col-span-9 xl:col-span-9 2xl:col-span-10 space-y-5 w-full min-w-0">
             {/* Tab 1: Flagged Triage Inbox (View 1) */}
             {activeTab === 'triage' && (
               <ErrorBoundary fallbackTitle="Triage Inbox View Error">
@@ -938,8 +948,8 @@ export default function App() {
             )}
           </div>
 
-          {/* Ledger State Telemetry on the Side (4 cols on lg, 3 cols on xl/2xl) */}
-          <div className="lg:col-span-4 xl:col-span-3 2xl:col-span-3 sticky top-20">
+          {/* Ledger State Telemetry on the Side (3 cols on lg/xl, 2 cols on 2xl) */}
+          <div className="lg:col-span-3 xl:col-span-3 2xl:col-span-2 sticky top-20">
             <TelemetrySidebar
               totalTransactionsCount={transactions.length}
               needsReviewCount={needsReviewCount}

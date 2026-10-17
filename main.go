@@ -110,6 +110,7 @@ func enforceAirGapAndMemoryLock() error {
 // ============================================================================
 
 type Config struct {
+	AppName          string `json:"app_name"`
 	ConfigDir        string `json:"config_dir"`
 	DataDir          string `json:"data_dir"`
 	InboxDir         string `json:"inbox_dir"`
@@ -1354,7 +1355,23 @@ func (e *FinanceEngine) handleGetStatus(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	appName := e.cfg.AppName
+	if rawCfg, err := os.ReadFile(filepath.Join(e.cfg.ConfigDir, "config.json")); err == nil {
+		var parsedCfg struct {
+			System struct {
+				AppName string `json:"app_name"`
+			} `json:"system"`
+		}
+		if json.Unmarshal(rawCfg, &parsedCfg) == nil && strings.TrimSpace(parsedCfg.System.AppName) != "" {
+			appName = strings.TrimSpace(parsedCfg.System.AppName)
+		}
+	}
+	if appName == "" {
+		appName = "Zero-Leak Local Finance Engine"
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
+		"app_name":              appName,
 		"post_ingest_policy":    "ephemeral_ram_purge",
 		"total_transactions":    totalTx,
 		"needs_review_count":    needsRev,
@@ -2794,10 +2811,18 @@ func main() {
 	inboxDir := filepath.Join(baseDir, "inbox")
 	archiveDir := filepath.Join(baseDir, "archive")
 
+	appName := os.Getenv("FINANCE_APP_NAME")
+	if appName == "" {
+		appName = "Zero-Leak Local Finance Engine"
+	}
+
 	// Read /config/config.json if available
 	configFile := filepath.Join(configDir, "config.json")
 	if raw, err := os.ReadFile(configFile); err == nil {
 		var fConfig struct {
+			System struct {
+				AppName string `json:"app_name"`
+			} `json:"system"`
 			Network struct {
 				ListenAddress string `json:"listen_address"`
 			} `json:"network"`
@@ -2812,6 +2837,9 @@ func main() {
 			} `json:"directories"`
 		}
 		if err := json.Unmarshal(raw, &fConfig); err == nil {
+			if strings.TrimSpace(fConfig.System.AppName) != "" {
+				appName = strings.TrimSpace(fConfig.System.AppName)
+			}
 			if fConfig.Network.ListenAddress != "" && listenAddr == "" {
 				listenAddr = fConfig.Network.ListenAddress
 			}
@@ -2854,6 +2882,7 @@ func main() {
 	defer clear(passphrase)
 
 	cfg := Config{
+		AppName:          appName,
 		ConfigDir:        configDir,
 		DataDir:          dataDir,
 		InboxDir:         inboxDir,

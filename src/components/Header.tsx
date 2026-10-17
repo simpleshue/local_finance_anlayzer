@@ -2,6 +2,7 @@ import React from 'react';
 import { Shield, ShieldAlert, Lock, Cpu, Database, UploadCloud, Tag, Building2 } from 'lucide-react';
 
 interface HeaderProps {
+  appName?: string;
   activeTab: string;
   onTabChange: (tab: string) => void;
   needsReviewCount: number;
@@ -9,6 +10,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  appName = 'Zero-Leak Local Finance Engine',
   activeTab,
   onTabChange,
   needsReviewCount,
@@ -17,7 +19,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
       {/* Top Security Banner */}
-      <div className="w-full max-w-[1750px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-10 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="w-full px-3 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
             <Shield className="w-5 h-5" />
@@ -25,7 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-slate-100 tracking-tight text-base">
-                ZERO-LEAK LOCAL FINANCE ENGINE
+                {appName}
               </span>
               <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-mono font-medium bg-emerald-950/80 text-emerald-400 border border-emerald-500/30">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -55,7 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Navigation Bar - All Views as Inline Tabs */}
-      <div className="w-full max-w-[1750px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-10 flex overflow-x-auto border-t border-slate-800/80 scrollbar-none">
+      <div className="w-full px-3 sm:px-6 lg:px-8 flex overflow-x-auto border-t border-slate-800/80 scrollbar-none">
         <nav className="flex items-center space-x-2 py-2">
           {/* Tab 1: Triage Inbox */}
           <button
