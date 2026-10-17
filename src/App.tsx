@@ -104,15 +104,13 @@ export default function App() {
                 };
               }
             });
-            if (Object.keys(loadedAccts).length > 0) {
-              setAccounts(loadedAccts);
-            }
+            setAccounts(loadedAccts);
           }
         }
         const txRes = await fetch('/api/transactions');
         if (txRes.ok && mounted) {
           const txList = await txRes.json();
-          if (Array.isArray(txList) && txList.length > 0) {
+          if (Array.isArray(txList)) {
             // Map Go backend transaction field names to frontend TypeScript schema
             const mapped: Transaction[] = txList.map((t: any) => ({
               id: t.id,
@@ -140,6 +138,72 @@ export default function App() {
     fetchBackendState();
     return () => { mounted = false; };
   }, []);
+
+  // Helper to refresh state from backend after server-side mutations
+  const refreshFromBackend = async () => {
+    try {
+      const statusRes = await fetch('/api/status');
+      if (statusRes.ok) {
+        const status = await statusRes.json();
+        if (Array.isArray(status.categories) && status.categories.length > 0) {
+          setCategories(status.categories);
+        }
+        if (Array.isArray(status.rules)) {
+          const mappedRules: Rule[] = status.rules.map((r: any, idx: number) => ({
+            id: r.id || `rule_${idx}`,
+            pattern: r.pattern || '',
+            category: r.category || 'Uncategorized',
+            cleanPayee: r.cleanPayee || r.clean_payee || '',
+            createdAt: r.createdAt || r.created_at || new Date().toISOString(),
+          }));
+          setRules(mappedRules);
+        }
+        if (status.accounts && typeof status.accounts === 'object') {
+          const loadedAccts: Record<string, Account> = {};
+          Object.values(status.accounts).forEach((a: any) => {
+            if (a && a.id) {
+              loadedAccts[a.id] = {
+                id: a.id,
+                maskedDisplay: a.masked_display || a.maskedDisplay || '****0000',
+                institution: a.institution || 'Unknown Bank',
+                type: a.type || 'credit_card',
+                currency: a.currency || 'USD',
+                description: a.description || '',
+                createdAt: a.created_at || a.createdAt || new Date().toISOString(),
+              };
+            }
+          });
+          setAccounts(loadedAccts);
+        }
+      }
+      const txRes = await fetch('/api/transactions');
+      if (txRes.ok) {
+        const txList = await txRes.json();
+        if (Array.isArray(txList)) {
+          const mapped: Transaction[] = txList.map((t: any) => ({
+            id: t.id,
+            accountId: t.account_id || '',
+            accountMasked: t.account_masked || '****0000',
+            transactionDate: t.transaction_date || '',
+            amountCents: t.amount_cents || 0,
+            rawPayee: t.raw_payee || '',
+            cleanPayee: t.clean_payee || t.raw_payee || '',
+            category: t.category || 'Uncategorized',
+            confidenceScore: typeof t.confidence_score === 'number' ? t.confidence_score : 1.0,
+            needsReview: !!t.needs_review,
+            categorizationTier: t.categorization_tier || 'regex',
+            userVerified: !!t.user_verified,
+            sourceFileHash: t.source_file_hash || '',
+            importedAt: t.imported_at || new Date().toISOString(),
+          }));
+          setTransactions(mapped);
+        }
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   // Modal State for Rule Generation / Editing
   const [ruleModalState, setRuleModalState] = useState<{
@@ -190,7 +254,55 @@ export default function App() {
     // 1. Calculate SHA-256 hash of payload
     const payloadHash = (await sha256Hex(rawBytes)).substring(0, 16);
 
-    // 2. Parse OFX/QFX statement
+    // Memory Zeroing Event Log (simulating defer clear(rawBytes) and clear(rawAcctID))
+    const previewBefore = rawText.slice(0, 150).replace(/\r?\n/g, ' ') + '...';
+    const previewAfter = `00 00 00 00 00 00 00 00 [ALL ${rawBytes.length} BYTES ZEROED VIA clear(rawBytes)]`;
+
+    setMemoryEvents(prev => [
+      {
+        timestamp: new Date().toLocaleTimeString(),
+        label: `Ingest: ${filename} (OFX/QFX Buffer)`,
+        bytesCount: rawBytes.length,
+        previewBefore,
+        previewAfter,
+        status: 'WIPED_OK',
+      },
+      ...prev.slice(0, 19),
+    ]);
+
+    // Try backend /api/upload first so account IDs and rules use the exact backend vault passphrase & state
+    try {
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'X-Filename': filename },
+        body: rawText,
+      });
+      if (uploadRes.ok) {
+        const backendData = await uploadRes.json();
+        await refreshFromBackend();
+        const durationMs = Math.round(performance.now() - startTime);
+        const result: IngestResult = {
+          filename: backendData.filename || filename,
+          status: 'success',
+          totalParsed: backendData.total_parsed ?? 0,
+          inserted: backendData.inserted ?? 0,
+          skippedDuplicates: backendData.skipped_duplicates ?? 0,
+          flaggedForReview: backendData.flagged_for_review ?? 0,
+          rawDisposition: 'zeroed_from_ram',
+          sourceFileHash: payloadHash,
+          durationMs,
+        };
+        setLastIngestResult(result);
+        if (result.flaggedForReview > 0 && activeTab !== 'triage') {
+          setActiveTab('triage');
+        }
+        return result;
+      }
+    } catch {
+      // Offline preview mode fallback below
+    }
+
+    // 2. Parse OFX/QFX statement locally (fallback when backend is offline)
     const parsed = parseOFX(rawText);
 
     // 3. HMAC-SHA256 hash of raw account ID, mask display
@@ -214,23 +326,7 @@ export default function App() {
       };
     });
 
-    // 4. Memory Zeroing Event Log (simulating defer clear(rawBytes) and clear(rawAcctID))
-    const previewBefore = rawText.slice(0, 150).replace(/\r?\n/g, ' ') + '...';
-    const previewAfter = `00 00 00 00 00 00 00 00 [ALL ${rawBytes.length} BYTES ZEROED VIA clear(rawBytes)]`;
-
-    setMemoryEvents(prev => [
-      {
-        timestamp: new Date().toLocaleTimeString(),
-        label: `Ingest: ${filename} (OFX/QFX Buffer)`,
-        bytesCount: rawBytes.length,
-        previewBefore,
-        previewAfter,
-        status: 'WIPED_OK',
-      },
-      ...prev.slice(0, 19),
-    ]);
-
-    // 5. Deduplicate and Categorize
+    // 4. Deduplicate and Categorize
     let inserted = 0;
     let duplicates = 0;
     let flagged = 0;
@@ -302,17 +398,6 @@ export default function App() {
     };
 
     setLastIngestResult(result);
-
-    // Sync with backend /api/upload if available
-    try {
-      fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'X-Filename': filename },
-        body: rawText,
-      }).catch(() => {});
-    } catch {
-      // offline preview mode
-    }
 
     // Switch to triage if new items were flagged
     if (flagged > 0 && activeTab !== 'triage') {
@@ -402,6 +487,11 @@ export default function App() {
   const handleAddCategory = (newCat: string) => {
     if (!categories.includes(newCat)) {
       setCategories(prev => [...prev, newCat]);
+      fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newCat }),
+      }).catch(() => {});
     }
   };
 
@@ -421,6 +511,11 @@ export default function App() {
       }
       return next;
     });
+    fetch('/api/categories', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ old_name: oldName, new_name: newName }),
+    }).catch(() => {});
   };
 
   // Delete category and reassign impacted transactions to Uncategorized
@@ -443,10 +538,14 @@ export default function App() {
     setRules(prev =>
       prev.map(r => (r.category === catName ? { ...r, category: 'Uncategorized' } : r))
     );
+    fetch(`/api/categories?name=${encodeURIComponent(catName)}`, {
+      method: 'DELETE',
+    }).catch(() => {});
   };
 
   // Batch Approve All Current Review Items
   const handleBatchApproveAll = () => {
+    const toApprove = transactions.filter(tx => tx.needsReview || tx.category === 'Uncategorized');
     const updatedHistory: Record<string, HistoryItem> = { ...historyMap };
     setTransactions(prev =>
       prev.map(tx => {
@@ -463,16 +562,24 @@ export default function App() {
       })
     );
     setHistoryMap(updatedHistory);
+    for (const tx of toApprove) {
+      fetch('/api/transactions/categorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: tx.id, category: tx.category, clean_payee: tx.cleanPayee }),
+      }).catch(() => {});
+    }
   };
 
   // Save or Update RE2 Regex Rule
-  const handleSaveRule = (
+  const handleSaveRule = async (
     pattern: string,
     category: string,
     cleanPayee: string,
     applyHistorical: boolean,
     editingRuleId?: string
   ) => {
+    const ruleId = editingRuleId || `rule-${Date.now()}`;
     if (editingRuleId) {
       setRules(prev =>
         prev.map(r =>
@@ -483,30 +590,13 @@ export default function App() {
       );
     } else {
       const newRule: Rule = {
-        id: `rule-${Date.now()}`,
+        id: ruleId,
         pattern,
         category,
         cleanPayee: cleanPayee.trim() || undefined,
         createdAt: new Date().toISOString(),
       };
       setRules(prev => [newRule, ...prev]);
-    }
-
-    // Sync with Go backend if available
-    try {
-      fetch('/api/rules/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: editingRuleId,
-          pattern,
-          category,
-          clean_payee: cleanPayee.trim(),
-          apply_historical: applyHistorical,
-        }),
-      }).catch(() => {});
-    } catch {
-      // offline
     }
 
     if (applyHistorical) {
@@ -538,12 +628,36 @@ export default function App() {
         // Regex handled safely
       }
     }
+
+    // Sync with Go backend if available
+    try {
+      const res = await fetch('/api/rules/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: ruleId,
+          pattern,
+          category,
+          clean_payee: cleanPayee.trim(),
+          apply_to_historical: applyHistorical,
+          apply_historical: applyHistorical,
+        }),
+      });
+      if (res.ok) {
+        await refreshFromBackend();
+      }
+    } catch {
+      // offline
+    }
   };
 
   const handleDeleteRule = async (id: string) => {
     setRules(prev => prev.filter(r => r.id !== id));
     try {
-      await fetch(`/api/rules/delete?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const res = await fetch(`/api/rules/delete?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (res.ok) {
+        await refreshFromBackend();
+      }
     } catch {
       // offline
     }

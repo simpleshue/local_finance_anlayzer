@@ -169,6 +169,7 @@ type LedgerState struct {
 	Transactions map[string]Transaction `json:"transactions"`
 	HistoryMap   map[string]HistoryItem `json:"history_map"` // Normalized RawPayee -> Historical Choice
 	Rules        []Rule                 `json:"rules"`
+	Categories   []CategoryDef          `json:"categories,omitempty"`
 }
 
 type HistoryItem struct {
@@ -572,31 +573,53 @@ type FinanceEngine struct {
 	configPath     string
 }
 
-// loadCategoriesFromConfig reads the taxonomy from /config/categories.json.
-func (e *FinanceEngine) loadCategoriesFromConfig() error {
+// loadCategoriesFromConfig reads the taxonomy from /config/categories.json (or .example fallback).
+func (e *FinanceEngine) loadCategoriesFromConfig(allowExampleFallback bool) ([]CategoryDef, error) {
 	data, err := os.ReadFile(e.categoriesPath)
 	if err != nil {
-		return err
+		if !allowExampleFallback {
+			return nil, err
+		}
+		data, err = os.ReadFile(e.categoriesPath + ".example")
+		if err != nil {
+			return nil, err
+		}
 	}
 	var cats []CategoryDef
 	if err := json.Unmarshal(data, &cats); err != nil {
-		return err
+		return nil, err
 	}
+	return cats, nil
+}
+
+func (e *FinanceEngine) setCategoriesLocked(cats []CategoryDef) {
 	e.categories = cats
+	e.state.Categories = cats
 	names := make([]string, 0, len(cats))
 	for _, c := range cats {
 		names = append(names, c.Name)
 	}
 	e.categoryNames = names
-	return nil
+}
+
+func (e *FinanceEngine) saveCategoriesToConfigLocked() error {
+	e.state.Categories = e.categories
+	data, err := json.MarshalIndent(e.categories, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(e.categoriesPath, data, 0600)
 }
 
 // loadAccountsFromConfig reads predefined account nicknames/metadata from config/accounts.json
-func (e *FinanceEngine) loadAccountsFromConfig() error {
+// Only uses accounts.json.example on first boot when no accounts exist in the encrypted ledger.
+func (e *FinanceEngine) loadAccountsFromConfig(allowExampleFallback bool) error {
 	path := e.accountsPath
 	data, err := os.ReadFile(path)
 	if err != nil {
-		// Fallback to example if user has not yet customized accounts.json
+		if !allowExampleFallback {
+			return err
+		}
 		data, err = os.ReadFile(path + ".example")
 		if err != nil {
 			return err
@@ -652,15 +675,21 @@ func (e *FinanceEngine) saveAccountsToConfigLocked() error {
 	return os.WriteFile(e.accountsPath, data, 0600)
 }
 
-// loadRulesFromConfig reads and compiles deterministic RE2 rules from /config/rules.json.
-func (e *FinanceEngine) loadRulesFromConfig() error {
+// loadRulesFromConfig reads and compiles deterministic RE2 rules from /config/rules.json (or .example fallback).
+func (e *FinanceEngine) loadRulesFromConfig(allowExampleFallback bool) ([]Rule, error) {
 	data, err := os.ReadFile(e.rulesPath)
 	if err != nil {
-		return err
+		if !allowExampleFallback {
+			return nil, err
+		}
+		data, err = os.ReadFile(e.rulesPath + ".example")
+		if err != nil {
+			return nil, err
+		}
 	}
 	var fileRules []Rule
 	if err := json.Unmarshal(data, &fileRules); err != nil {
-		return err
+		return nil, err
 	}
 	validRules := make([]Rule, 0, len(fileRules))
 	for i := range fileRules {
@@ -674,8 +703,7 @@ func (e *FinanceEngine) loadRulesFromConfig() error {
 			log.Printf("[WARN] Rule %s has invalid regex %q: %v", fileRules[i].ID, fileRules[i].Pattern, err)
 		}
 	}
-	e.state.Rules = validRules
-	return nil
+	return validRules, nil
 }
 
 func NewFinanceEngine(cfg Config, passphrase []byte) (*FinanceEngine, error) {
@@ -701,28 +729,7 @@ func NewFinanceEngine(cfg Config, passphrase []byte) (*FinanceEngine, error) {
 		},
 	}
 
-	// 1. External configuration loading: categories from /config/categories.json
-	if err := eng.loadCategoriesFromConfig(); err != nil {
-		log.Printf("[CONFIG] Warning: could not load %s: %v", eng.categoriesPath, err)
-	} else {
-		log.Printf("[CONFIG] Loaded %d categories from %s", len(eng.categoryNames), eng.categoriesPath)
-	}
-
-	// 2. External configuration loading: RE2 rules from /config/rules.json
-	if err := eng.loadRulesFromConfig(); err != nil {
-		log.Printf("[CONFIG] Warning: could not load %s: %v", eng.rulesPath, err)
-	} else {
-		log.Printf("[CONFIG] Loaded %d rules from %s", len(eng.state.Rules), eng.rulesPath)
-	}
-
-	// 3. External configuration loading: accounts from /config/accounts.json
-	if err := eng.loadAccountsFromConfig(); err != nil {
-		log.Printf("[CONFIG] Warning: could not load %s: %v", eng.accountsPath, err)
-	} else {
-		log.Printf("[CONFIG] Loaded %d accounts from %s", len(eng.state.Accounts), eng.accountsPath)
-	}
-
-	// 4. Load encrypted state
+	// Load encrypted state (or seed on first boot)
 	if err := eng.loadEncryptedState(); err != nil {
 		return nil, err
 	}
@@ -735,8 +742,21 @@ func (e *FinanceEngine) loadEncryptedState() error {
 	defer e.mu.Unlock()
 
 	if _, err := os.Stat(e.dbPath); os.IsNotExist(err) {
-		// Seed initial encrypted database with sample triage data on first boot
+		// First boot: load initial categories, rules & accounts (allowing .example fallback) before seeding demo transactions
+		if cats, cErr := e.loadCategoriesFromConfig(true); cErr == nil {
+			e.setCategoriesLocked(cats)
+			log.Printf("[CONFIG] Loaded %d categories on initial boot", len(e.categoryNames))
+		}
+		if rules, rErr := e.loadRulesFromConfig(true); rErr == nil {
+			e.state.Rules = rules
+			log.Printf("[CONFIG] Loaded %d rules on initial boot", len(e.state.Rules))
+		}
+		if aErr := e.loadAccountsFromConfig(true); aErr == nil {
+			log.Printf("[CONFIG] Loaded %d accounts on initial boot", len(e.state.Accounts))
+		}
 		e.seedInitialDemoTransactionsLocked()
+		_ = e.saveCategoriesToConfigLocked()
+		_ = e.saveAccountsToConfigLocked()
 		return e.saveEncryptedStateLocked()
 	}
 
@@ -755,12 +775,35 @@ func (e *FinanceEngine) loadEncryptedState() error {
 	if err := json.Unmarshal(plainBytes, &savedState); err != nil {
 		return err
 	}
-	e.state.Accounts = savedState.Accounts
-	e.state.Transactions = savedState.Transactions
-	e.state.HistoryMap = savedState.HistoryMap
+	if savedState.Accounts != nil {
+		e.state.Accounts = savedState.Accounts
+	}
+	if savedState.Transactions != nil {
+		e.state.Transactions = savedState.Transactions
+	}
+	if savedState.HistoryMap != nil {
+		e.state.HistoryMap = savedState.HistoryMap
+	}
 
-	// If no rules were loaded from /config/rules.json, use saved rules
-	if len(e.state.Rules) == 0 && len(savedState.Rules) > 0 {
+	// Load categories from explicit config/categories.json first, else savedState.Categories, else categories.json.example
+	if fileCats, cErr := e.loadCategoriesFromConfig(false); cErr == nil && len(fileCats) > 0 {
+		e.setCategoriesLocked(fileCats)
+		log.Printf("[CONFIG] Loaded %d categories from %s", len(e.categoryNames), e.categoriesPath)
+	} else if len(savedState.Categories) > 0 {
+		e.setCategoriesLocked(savedState.Categories)
+		_ = e.saveCategoriesToConfigLocked()
+		log.Printf("[CONFIG] Restored %d categories from encrypted ledger", len(e.categoryNames))
+	} else if exampleCats, exErr := e.loadCategoriesFromConfig(true); exErr == nil {
+		e.setCategoriesLocked(exampleCats)
+		_ = e.saveCategoriesToConfigLocked()
+		log.Printf("[CONFIG] Initialized %d categories from template", len(e.categoryNames))
+	}
+
+	// Load rules from saved state first, then overlay config/rules.json if explicitly present
+	if fileRules, rErr := e.loadRulesFromConfig(false); rErr == nil && len(fileRules) > 0 {
+		e.state.Rules = fileRules
+		log.Printf("[CONFIG] Loaded %d rules from %s", len(e.state.Rules), e.rulesPath)
+	} else if len(savedState.Rules) > 0 {
 		validRules := make([]Rule, 0, len(savedState.Rules))
 		for _, r := range savedState.Rules {
 			if re, err := regexp.Compile(r.Pattern); err == nil {
@@ -769,13 +812,72 @@ func (e *FinanceEngine) loadEncryptedState() error {
 			}
 		}
 		e.state.Rules = validRules
+	} else if exampleRules, exErr := e.loadRulesFromConfig(true); exErr == nil {
+		e.state.Rules = exampleRules
 	}
+
+	// Only overlay explicit user config/accounts.json (do NOT fallback to accounts.json.example on existing DB)
+	if _, aStatErr := os.Stat(e.accountsPath); aStatErr == nil {
+		var fileAccts []Account
+		if data, readErr := os.ReadFile(e.accountsPath); readErr == nil {
+			if json.Unmarshal(data, &fileAccts) == nil && len(fileAccts) > 0 {
+				// Replace accounts map with config/accounts.json so deleted/renamed accounts stay in sync
+				nextAccts := make(map[string]Account, len(fileAccts))
+				for _, a := range fileAccts {
+					if a.ID == "" {
+						continue
+					}
+					if a.CreatedAt.IsZero() {
+						if prev, ok := e.state.Accounts[a.ID]; ok && !prev.CreatedAt.IsZero() {
+							a.CreatedAt = prev.CreatedAt
+						} else {
+							a.CreatedAt = time.Now()
+						}
+					}
+					nextAccts[a.ID] = a
+				}
+				e.state.Accounts = nextAccts
+			}
+		}
+	}
+
+	// Re-apply active RE2 rules to any uncategorized or unverified transactions on startup
+	stateChanged := false
+	for id, tx := range e.state.Transactions {
+		if tx.Category == "Uncategorized" || tx.CategorizationTier == "fallback" || tx.CategorizationTier == "regex" {
+			for _, rule := range e.state.Rules {
+				if rule.compiled != nil && rule.compiled.MatchString(tx.RawPayee) {
+					newClean := tx.CleanPayee
+					if rule.CleanPayee != "" {
+						newClean = rule.CleanPayee
+					} else if newClean == "" {
+						newClean = cleanMerchantName(tx.RawPayee)
+					}
+					if tx.Category != rule.Category || tx.CleanPayee != newClean || tx.NeedsReview {
+						tx.Category = rule.Category
+						tx.CleanPayee = newClean
+						tx.ConfidenceScore = 1.0
+						tx.NeedsReview = false
+						tx.CategorizationTier = "regex"
+						e.state.Transactions[id] = tx
+						stateChanged = true
+					}
+					break
+				}
+			}
+		}
+	}
+	if stateChanged {
+		_ = e.saveEncryptedStateLocked()
+	}
+
 	return nil
 }
 
 // saveEncryptedStateLocked serializes and encrypts the entire database state with AES-256-GCM
 // before writing atomically to disk.
 func (e *FinanceEngine) saveEncryptedStateLocked() error {
+	e.state.Categories = e.categories
 	plainBytes, err := json.Marshal(e.state)
 	if err != nil {
 		return err
@@ -802,9 +904,12 @@ func (e *FinanceEngine) saveEncryptedStateLocked() error {
 	}
 	f.Close()
 
-	// Also export rules.json for transparency/backup
+	// Also export rules.json and categories.json for transparency/backup
 	if rulesBytes, err := json.MarshalIndent(e.state.Rules, "", "  "); err == nil {
 		_ = os.WriteFile(e.rulesPath, rulesBytes, 0600)
+	}
+	if len(e.categories) > 0 {
+		_ = e.saveCategoriesToConfigLocked()
 	}
 
 	return os.Rename(tmpPath, e.dbPath)
@@ -932,6 +1037,7 @@ func (e *FinanceEngine) IngestRawStatement(rawBytes []byte, filename string) (*I
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	newAccountAdded := false
 	if _, exists := e.state.Accounts[acctID]; !exists {
 		e.state.Accounts[acctID] = Account{
 			ID:            acctID,
@@ -941,6 +1047,7 @@ func (e *FinanceEngine) IngestRawStatement(rawBytes []byte, filename string) (*I
 			Currency:      parsed.Currency,
 			CreatedAt:     time.Now(),
 		}
+		newAccountAdded = true
 	}
 
 	inserted := 0
@@ -981,6 +1088,9 @@ func (e *FinanceEngine) IngestRawStatement(rawBytes []byte, filename string) (*I
 
 	disposition := "zeroed_from_ram"
 
+	if newAccountAdded {
+		_ = e.saveAccountsToConfigLocked()
+	}
 	if err := e.saveEncryptedStateLocked(); err != nil {
 		return nil, err
 	}
@@ -1479,16 +1589,18 @@ func (e *FinanceEngine) handleTestRule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (e *FinanceEngine) handleCreateRule(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodPost && r.Method != http.MethodPut {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 
 	var req struct {
+		ID                string `json:"id"`
 		Pattern           string `json:"pattern"`
 		Category          string `json:"category"`
 		CleanPayee        string `json:"clean_payee"`
-		ApplyToHistorical bool   `json:"apply_to_historical"`
+		ApplyToHistorical *bool  `json:"apply_to_historical"`
+		ApplyHistorical   *bool  `json:"apply_historical"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
@@ -1501,27 +1613,58 @@ func (e *FinanceEngine) handleCreateRule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	applyHistorical := true
+	if req.ApplyToHistorical != nil {
+		applyHistorical = *req.ApplyToHistorical
+	} else if req.ApplyHistorical != nil {
+		applyHistorical = *req.ApplyHistorical
+	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	newRule := Rule{
-		ID:         fmt.Sprintf("rule-%d", time.Now().UnixNano()),
-		Pattern:    req.Pattern,
-		Category:   req.Category,
-		CleanPayee: strings.TrimSpace(req.CleanPayee),
-		CreatedAt:  time.Now(),
-		compiled:   re,
+	var targetRule Rule
+	updatedExisting := false
+	if req.ID != "" {
+		for i, existing := range e.state.Rules {
+			if existing.ID == req.ID {
+				e.state.Rules[i].Pattern = req.Pattern
+				e.state.Rules[i].Category = req.Category
+				e.state.Rules[i].CleanPayee = strings.TrimSpace(req.CleanPayee)
+				e.state.Rules[i].compiled = re
+				targetRule = e.state.Rules[i]
+				updatedExisting = true
+				break
+			}
+		}
 	}
-	// Prepend so user-created rules take priority
-	e.state.Rules = append([]Rule{newRule}, e.state.Rules...)
+
+	if !updatedExisting {
+		ruleID := req.ID
+		if ruleID == "" {
+			ruleID = fmt.Sprintf("rule-%d", time.Now().UnixNano())
+		}
+		targetRule = Rule{
+			ID:         ruleID,
+			Pattern:    req.Pattern,
+			Category:   req.Category,
+			CleanPayee: strings.TrimSpace(req.CleanPayee),
+			CreatedAt:  time.Now(),
+			compiled:   re,
+		}
+		// Prepend so user-created rules take priority
+		e.state.Rules = append([]Rule{targetRule}, e.state.Rules...)
+	}
 
 	updatedCount := 0
-	if req.ApplyToHistorical {
+	if applyHistorical {
 		for id, tx := range e.state.Transactions {
 			if re.MatchString(tx.RawPayee) {
 				tx.Category = req.Category
-				if newRule.CleanPayee != "" {
-					tx.CleanPayee = newRule.CleanPayee
+				if targetRule.CleanPayee != "" {
+					tx.CleanPayee = targetRule.CleanPayee
+				} else if tx.CleanPayee == "" {
+					tx.CleanPayee = cleanMerchantName(tx.RawPayee)
 				}
 				tx.ConfidenceScore = 1.0
 				tx.NeedsReview = false
@@ -1539,9 +1682,52 @@ func (e *FinanceEngine) handleCreateRule(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"rule":            newRule,
+		"rule":            targetRule,
 		"updated_records": updatedCount,
 	})
+}
+
+func (e *FinanceEngine) handleDeleteRule(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	ruleID := strings.TrimSpace(r.URL.Query().Get("id"))
+	if ruleID == "" && r.Body != nil {
+		var req struct {
+			ID string `json:"id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		ruleID = strings.TrimSpace(req.ID)
+	}
+	if ruleID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "rule id is required"})
+		return
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	filtered := make([]Rule, 0, len(e.state.Rules))
+	removed := false
+	for _, rule := range e.state.Rules {
+		if rule.ID == ruleID {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, rule)
+	}
+	e.state.Rules = filtered
+
+	if removed {
+		if err := e.saveEncryptedStateLocked(); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": removed, "id": ruleID})
 }
 
 func (e *FinanceEngine) handleGetPolicy(w http.ResponseWriter, r *http.Request) {
@@ -1551,12 +1737,167 @@ func (e *FinanceEngine) handleGetPolicy(w http.ResponseWriter, r *http.Request) 
 }
 
 func (e *FinanceEngine) handleCategories(w http.ResponseWriter, r *http.Request) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	writeJSON(w, http.StatusOK, map[string]any{
-		"categories": e.categories,
-		"names":      e.categoryNames,
-	})
+	if r.Method == http.MethodGet {
+		e.mu.RLock()
+		defer e.mu.RUnlock()
+		writeJSON(w, http.StatusOK, map[string]any{
+			"categories": e.categories,
+			"names":      e.categoryNames,
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		var req struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Name) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "category name is required"})
+			return
+		}
+		cleanName := strings.TrimSpace(req.Name)
+
+		e.mu.Lock()
+		defer e.mu.Unlock()
+
+		for _, existing := range e.categoryNames {
+			if strings.EqualFold(existing, cleanName) {
+				writeJSON(w, http.StatusOK, map[string]any{"categories": e.categories, "names": e.categoryNames})
+				return
+			}
+		}
+
+		var parent *string
+		if idx := strings.Index(cleanName, ":"); idx > 0 {
+			p := cleanName[:idx]
+			parent = &p
+		}
+		id := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(cleanName, ":", "-"), " ", "-"))
+		e.categories = append(e.categories, CategoryDef{
+			ID:     id,
+			Name:   cleanName,
+			Parent: parent,
+		})
+		e.categoryNames = append(e.categoryNames, cleanName)
+		_ = e.saveCategoriesToConfigLocked()
+		_ = e.saveEncryptedStateLocked()
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"categories": e.categories,
+			"names":      e.categoryNames,
+		})
+		return
+	}
+
+	if r.Method == http.MethodPut {
+		var req struct {
+			OldName string `json:"old_name"`
+			NewName string `json:"new_name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.OldName) == "" || strings.TrimSpace(req.NewName) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "old_name and new_name are required"})
+			return
+		}
+		oldName := strings.TrimSpace(req.OldName)
+		newName := strings.TrimSpace(req.NewName)
+
+		e.mu.Lock()
+		defer e.mu.Unlock()
+
+		for i, c := range e.categories {
+			if c.Name == oldName {
+				e.categories[i].Name = newName
+				e.categories[i].ID = strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(newName, ":", "-"), " ", "-"))
+			}
+		}
+		for i, n := range e.categoryNames {
+			if n == oldName {
+				e.categoryNames[i] = newName
+			}
+		}
+		for id, tx := range e.state.Transactions {
+			if tx.Category == oldName {
+				tx.Category = newName
+				e.state.Transactions[id] = tx
+			}
+		}
+		for i, rule := range e.state.Rules {
+			if rule.Category == oldName {
+				e.state.Rules[i].Category = newName
+			}
+		}
+		for k, h := range e.state.HistoryMap {
+			if h.Category == oldName {
+				h.Category = newName
+				e.state.HistoryMap[k] = h
+			}
+		}
+
+		_ = e.saveCategoriesToConfigLocked()
+		_ = e.saveEncryptedStateLocked()
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"categories": e.categories,
+			"names":      e.categoryNames,
+		})
+		return
+	}
+
+	if r.Method == http.MethodDelete {
+		catName := strings.TrimSpace(r.URL.Query().Get("name"))
+		if catName == "" && r.Body != nil {
+			var req struct {
+				Name string `json:"name"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			catName = strings.TrimSpace(req.Name)
+		}
+		if catName == "" || catName == "Uncategorized" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "valid category name is required"})
+			return
+		}
+
+		e.mu.Lock()
+		defer e.mu.Unlock()
+
+		nextCats := make([]CategoryDef, 0, len(e.categories))
+		nextNames := make([]string, 0, len(e.categoryNames))
+		for _, c := range e.categories {
+			if c.Name != catName {
+				nextCats = append(nextCats, c)
+				nextNames = append(nextNames, c.Name)
+			}
+		}
+		e.categories = nextCats
+		e.categoryNames = nextNames
+
+		for id, tx := range e.state.Transactions {
+			if tx.Category == catName {
+				tx.Category = "Uncategorized"
+				tx.NeedsReview = true
+				tx.UserVerified = false
+				tx.ConfidenceScore = 0.0
+				tx.CategorizationTier = "fallback"
+				e.state.Transactions[id] = tx
+			}
+		}
+		for i, rule := range e.state.Rules {
+			if rule.Category == catName {
+				e.state.Rules[i].Category = "Uncategorized"
+			}
+		}
+
+		_ = e.saveCategoriesToConfigLocked()
+		_ = e.saveEncryptedStateLocked()
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"categories": e.categories,
+			"names":      e.categoryNames,
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 }
 
 func (e *FinanceEngine) handleAccounts(w http.ResponseWriter, r *http.Request) {
@@ -1571,6 +1912,31 @@ func (e *FinanceEngine) handleAccounts(w http.ResponseWriter, r *http.Request) {
 			return accts[i].Institution < accts[j].Institution
 		})
 		writeJSON(w, http.StatusOK, accts)
+		return
+	}
+
+	if r.Method == http.MethodDelete {
+		acctID := strings.TrimSpace(r.URL.Query().Get("id"))
+		if acctID == "" && r.Body != nil {
+			var req struct {
+				ID string `json:"id"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			acctID = strings.TrimSpace(req.ID)
+		}
+		if acctID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "account ID is required"})
+			return
+		}
+
+		e.mu.Lock()
+		defer e.mu.Unlock()
+
+		delete(e.state.Accounts, acctID)
+		_ = e.saveEncryptedStateLocked()
+		_ = e.saveAccountsToConfigLocked()
+
+		writeJSON(w, http.StatusOK, map[string]any{"deleted": acctID})
 		return
 	}
 
@@ -2225,13 +2591,32 @@ function closeCategoryModal() {
   document.getElementById('categoryModal').classList.remove('open');
 }
 
-function addNewCategory() {
+function renderCategoryChips() {
+  const container = document.getElementById('catChipsContainer');
+  if (!container) return;
+  container.innerHTML = '';
+  for (const c of availableCategories) {
+    const chip = document.createElement('span');
+    chip.className = 'shield-badge';
+    chip.style.margin = '2px';
+    chip.textContent = c;
+    container.appendChild(chip);
+  }
+}
+
+async function addNewCategory() {
   const input = document.getElementById('newCatInput');
   const val = (input.value || '').trim();
   if (val && !availableCategories.includes(val)) {
     availableCategories.push(val);
     input.value = '';
     renderCategoryChips();
+    await fetch('/api/categories', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ name: val })
+    });
+    await refreshAll();
   }
 }
 
@@ -2534,6 +2919,7 @@ func main() {
 	mux.HandleFunc("/api/transactions/categorize", withAirGapCSP(engine.handleCategorizeTransaction))
 	mux.HandleFunc("/api/rules/test", withAirGapCSP(engine.handleTestRule))
 	mux.HandleFunc("/api/rules/create", withAirGapCSP(engine.handleCreateRule))
+	mux.HandleFunc("/api/rules/delete", withAirGapCSP(engine.handleDeleteRule))
 	mux.HandleFunc("/api/policy", withAirGapCSP(engine.handleGetPolicy))
 
 	srv := &http.Server{

@@ -60,7 +60,7 @@ export interface MemoryZeroEvent {
   status: 'WIPED_OK';
 }
 
-import categoriesData from '../../config/categories.json';
+import categoriesData from '../../config/categories.json.example';
 
 export interface CategoryItem {
   id: string;
