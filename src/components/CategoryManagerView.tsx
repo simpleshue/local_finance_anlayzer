@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Tag, Plus, Edit2, Trash2, Check, AlertCircle, ArrowRight, Search, Sparkles } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Tag, Plus, Edit2, Trash2, Check, AlertCircle, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Transaction, Rule } from '../types/finance';
 
 interface CategoryManagerViewProps {
@@ -10,6 +10,8 @@ interface CategoryManagerViewProps {
   onRenameCategory: (oldName: string, newName: string) => void;
   onDeleteCategory: (categoryName: string) => void;
 }
+
+type CategorySortCol = 'name' | 'spend' | 'txCount' | 'ruleCount';
 
 export const CategoryManagerView: React.FC<CategoryManagerViewProps> = ({
   categories,
@@ -25,32 +27,60 @@ export const CategoryManagerView: React.FC<CategoryManagerViewProps> = ({
   const [renameInput, setRenameInput] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [sortColumn, setSortColumn] = useState<CategorySortCol>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (col: CategorySortCol) => {
+    if (sortColumn === col) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(col);
+      setSortDirection(col === 'name' ? 'asc' : 'desc');
+    }
+  };
 
   // Compute stats per category
-  const categoryStats = categories.map(cat => {
-    let txCount = 0;
-    let spendCents = 0;
-    for (const tx of transactions) {
-      if (tx.category === cat) {
-        txCount++;
-        if (tx.amountCents < 0 && tx.category !== 'Transfer:CreditCardPayment') {
-          spendCents += Math.abs(tx.amountCents);
+  const categoryStats = useMemo(() => {
+    return categories.map(cat => {
+      let txCount = 0;
+      let spendCents = 0;
+      for (const tx of transactions) {
+        if (tx.category === cat) {
+          txCount++;
+          if (tx.amountCents < 0 && tx.category !== 'Transfer:CreditCardPayment') {
+            spendCents += Math.abs(tx.amountCents);
+          }
         }
       }
-    }
-    const ruleCount = rules.filter(r => r.category === cat).length;
-    return {
-      name: cat,
-      txCount,
-      spendCents,
-      ruleCount,
-    };
-  });
+      const ruleCount = rules.filter(r => r.category === cat).length;
+      return {
+        name: cat,
+        txCount,
+        spendCents,
+        ruleCount,
+      };
+    });
+  }, [categories, transactions, rules]);
 
-  const filteredStats = categoryStats.filter(c => {
-    if (!search.trim()) return true;
-    return c.name.toLowerCase().includes(search.toLowerCase());
-  });
+  const filteredStats = useMemo(() => {
+    const filtered = categoryStats.filter(c => {
+      if (!search.trim()) return true;
+      return c.name.toLowerCase().includes(search.toLowerCase());
+    });
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (sortColumn === 'name') {
+        cmp = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      } else if (sortColumn === 'spend') {
+        cmp = a.spendCents - b.spendCents;
+      } else if (sortColumn === 'txCount') {
+        cmp = a.txCount - b.txCount;
+      } else if (sortColumn === 'ruleCount') {
+        cmp = a.ruleCount - b.ruleCount;
+      }
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [categoryStats, search, sortColumn, sortDirection]);
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,11 +198,59 @@ export const CategoryManagerView: React.FC<CategoryManagerViewProps> = ({
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="border-b border-slate-800 text-[11px] font-mono text-slate-400 uppercase tracking-wider">
-              <th className="py-2.5 px-3">Category Name</th>
-              <th className="py-2.5 px-3">Historical Spend</th>
-              <th className="py-2.5 px-3">Transactions</th>
-              <th className="py-2.5 px-3">Associated Rules</th>
+            <tr className="border-b border-slate-800 text-[11px] font-mono text-slate-400 uppercase tracking-wider select-none">
+              <th
+                onClick={() => handleSort('name')}
+                className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Category Name</span>
+                  {sortColumn === 'name' ? (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort('spend')}
+                className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Historical Spend</span>
+                  {sortColumn === 'spend' ? (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort('txCount')}
+                className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Transactions</span>
+                  {sortColumn === 'txCount' ? (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort('ruleCount')}
+                className="py-2.5 px-3 cursor-pointer hover:text-slate-200 transition-colors"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Associated Rules</span>
+                  {sortColumn === 'ruleCount' ? (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-400" /> : <ArrowDown className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
+                  )}
+                </div>
+              </th>
               <th className="py-2.5 px-3 text-right">Actions</th>
             </tr>
           </thead>

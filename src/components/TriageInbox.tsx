@@ -1,9 +1,170 @@
-import React, { useState, useMemo } from 'react';
-import { Transaction, DEFAULT_CATEGORIES } from '../types/finance';
-import { Check, ShieldAlert, Sparkles, Plus, Search, CheckCheck, ArrowUpDown, ArrowUp, ArrowDown, Edit2, Trash2 } from 'lucide-react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Transaction, Account, DEFAULT_CATEGORIES } from '../types/finance';
+import { Check, ShieldAlert, Plus, Search, CheckCheck, ArrowUpDown, ArrowUp, ArrowDown, Edit2, Trash2, ChevronDown, X } from 'lucide-react';
+
+interface SearchableCategorySelectProps {
+  value: string;
+  categories: string[];
+  onChange: (category: string) => void;
+}
+
+const SearchableCategorySelect: React.FC<SearchableCategorySelectProps> = ({
+  value,
+  categories,
+  onChange,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [filterText, setFilterText] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const sortedCategories = useMemo(() => {
+    return [...categories].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+  }, [categories]);
+
+  const filteredCategories = useMemo(() => {
+    const q = filterText.trim().toLowerCase();
+    if (!q) return sortedCategories;
+    return sortedCategories.filter(c => c.toLowerCase().includes(q));
+  }, [sortedCategories, filterText]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+        setFilterText('');
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const handleOpen = () => {
+    setIsOpen(true);
+    setFilterText('');
+    const idx = sortedCategories.indexOf(value);
+    setHighlightedIndex(idx >= 0 ? idx : 0);
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
+  };
+
+  const handleSelect = (cat: string) => {
+    onChange(cat);
+    setIsOpen(false);
+    setFilterText('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(prev =>
+        filteredCategories.length > 0 ? (prev + 1) % filteredCategories.length : 0
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(prev =>
+        filteredCategories.length > 0
+          ? (prev - 1 + filteredCategories.length) % filteredCategories.length
+          : 0
+      );
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredCategories[highlightedIndex]) {
+        handleSelect(filteredCategories[highlightedIndex]);
+      } else if (filteredCategories.length > 0) {
+        handleSelect(filteredCategories[0]);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsOpen(false);
+      setFilterText('');
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative min-w-[190px]">
+      {!isOpen ? (
+        <button
+          type="button"
+          onClick={handleOpen}
+          className="w-full flex items-center justify-between gap-2 bg-slate-950 border border-slate-700 hover:border-indigo-500 text-slate-200 rounded px-2.5 py-1 text-xs font-medium focus:outline-none focus:border-indigo-500 cursor-pointer text-left transition-colors"
+          title="Click to select or type to filter categories"
+        >
+          <span className="truncate">{value}</span>
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+        </button>
+      ) : (
+        <div className="relative">
+          <input
+            ref={inputRef}
+            type="text"
+            value={filterText}
+            onChange={e => {
+              setFilterText(e.target.value);
+              setHighlightedIndex(0);
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder={value || 'Type to filter...'}
+            className="w-full bg-slate-950 border border-indigo-500 text-slate-100 rounded px-2.5 py-1 pr-6 text-xs font-mono placeholder-slate-400 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setIsOpen(false);
+              setFilterText('');
+            }}
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
+      {isOpen && (
+        <div className="absolute z-50 left-0 mt-1 w-64 max-h-56 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg shadow-2xl py-1 text-xs">
+          {filteredCategories.length === 0 ? (
+            <div className="px-3 py-2 text-slate-500 font-mono text-[11px]">
+              No matching category for "{filterText}"
+            </div>
+          ) : (
+            filteredCategories.map((cat, idx) => {
+              const isSelected = cat === value;
+              const isHighlighted = idx === highlightedIndex;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => handleSelect(cat)}
+                  onMouseEnter={() => setHighlightedIndex(idx)}
+                  className={`w-full text-left px-3 py-1.5 flex items-center justify-between transition-colors ${
+                    isHighlighted
+                      ? 'bg-indigo-600/30 text-indigo-200'
+                      : isSelected
+                      ? 'bg-slate-800/80 text-emerald-300 font-semibold'
+                      : 'text-slate-200 hover:bg-slate-800'
+                  }`}
+                >
+                  <span className="truncate">{cat}</span>
+                  {isSelected && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface TriageInboxProps {
   transactions: Transaction[];
+  accounts?: Record<string, Account>;
   categories?: string[];
   onApprove: (id: string, category: string, cleanPayee: string) => void;
   onOpenRuleModal: (rawPayee: string, cleanPayee: string, currentCategory: string) => void;
@@ -16,6 +177,7 @@ type TriageSortColumn = 'date' | 'payee' | 'amount' | 'confidence' | 'category';
 
 export const TriageInbox: React.FC<TriageInboxProps> = ({
   transactions,
+  accounts = {},
   categories = DEFAULT_CATEGORIES,
   onApprove,
   onOpenRuleModal,
@@ -29,14 +191,31 @@ export const TriageInbox: React.FC<TriageInboxProps> = ({
   const [sortColumn, setSortColumn] = useState<TriageSortColumn>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
+  const getAccountName = (tx: Transaction): string => {
+    const acc = accounts[tx.accountId];
+    if (!acc) return tx.accountMasked;
+    if (acc.description && acc.institution && acc.institution !== 'Statement Account') {
+      return `${acc.institution} (${acc.description})`;
+    }
+    if (acc.description) {
+      return acc.description;
+    }
+    if (acc.institution) {
+      return acc.institution;
+    }
+    return acc.maskedDisplay || tx.accountMasked;
+  };
+
   const filtered = transactions.filter(tx => {
     if (!tx.needsReview && tx.category !== 'Uncategorized') return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
+    const accName = getAccountName(tx).toLowerCase();
     return (
       tx.rawPayee.toLowerCase().includes(q) ||
       tx.cleanPayee.toLowerCase().includes(q) ||
-      tx.category.toLowerCase().includes(q)
+      tx.category.toLowerCase().includes(q) ||
+      accName.includes(q)
     );
   });
 
@@ -110,7 +289,7 @@ export const TriageInbox: React.FC<TriageInboxProps> = ({
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Filter payee or category..."
+              placeholder="Filter payee, account, category..."
               className="pl-8 pr-3 py-1.5 rounded-lg text-xs bg-slate-950 border border-slate-800 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-56 font-mono"
             />
           </div>
@@ -141,7 +320,7 @@ export const TriageInbox: React.FC<TriageInboxProps> = ({
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto pb-24">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-800 text-[11px] font-mono text-slate-400 uppercase tracking-wider select-none">
@@ -224,13 +403,19 @@ export const TriageInbox: React.FC<TriageInboxProps> = ({
                 const currentPayee =
                   editingPayees[tx.id] !== undefined ? editingPayees[tx.id] : tx.cleanPayee;
                 const confPct = Math.round(tx.confidenceScore * 100);
+                const accountName = getAccountName(tx);
 
                 return (
                   <tr key={tx.id} className="hover:bg-slate-800/40 transition-colors">
-                    {/* Date & Account */}
+                    {/* Date & Account Name */}
                     <td className="py-3 px-3 whitespace-nowrap">
                       <div className="font-mono text-slate-200">{tx.transactionDate}</div>
-                      <div className="font-mono text-[10px] text-slate-500">{tx.accountMasked}</div>
+                      <div
+                        className="text-[11px] font-medium text-indigo-300 mt-0.5"
+                        title={`${accountName} (${tx.accountMasked})`}
+                      >
+                        {accountName}
+                      </div>
                     </td>
 
                     {/* Payee */}
@@ -263,19 +448,13 @@ export const TriageInbox: React.FC<TriageInboxProps> = ({
                       </div>
                     </td>
 
-                    {/* Category Selector */}
+                    {/* Searchable & Sorted Category Selector */}
                     <td className="py-3 px-3 whitespace-nowrap">
-                      <select
+                      <SearchableCategorySelect
                         value={currentCat}
-                        onChange={e => handleCategoryChange(tx.id, e.target.value)}
-                        className="bg-slate-950 border border-slate-700 text-slate-200 rounded px-2.5 py-1 text-xs font-medium focus:outline-none focus:border-indigo-500 cursor-pointer"
-                      >
-                        {categories.map(c => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
-                      </select>
+                        categories={categories}
+                        onChange={cat => handleCategoryChange(tx.id, cat)}
+                      />
                     </td>
 
                     {/* Actions */}

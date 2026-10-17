@@ -849,6 +849,7 @@ export default function App() {
               <ErrorBoundary fallbackTitle="Triage Inbox View Error">
                 <TriageInbox
                   transactions={transactions}
+                  accounts={accounts}
                   categories={categories}
                   onApprove={handleApproveTransaction}
                   onOpenRuleModal={handleOpenRuleModal}

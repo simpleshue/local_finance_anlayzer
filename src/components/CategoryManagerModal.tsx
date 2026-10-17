@@ -31,26 +31,28 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Compute stats per category
-  const categoryStats = categories.map(cat => {
-    let txCount = 0;
-    let spendCents = 0;
-    for (const tx of transactions) {
-      if (tx.category === cat) {
-        txCount++;
-        if (tx.amountCents < 0 && tx.category !== 'Transfer:CreditCardPayment') {
-          spendCents += Math.abs(tx.amountCents);
+  // Compute stats per category (sorted alphabetically by category name by default)
+  const categoryStats = [...categories]
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+    .map(cat => {
+      let txCount = 0;
+      let spendCents = 0;
+      for (const tx of transactions) {
+        if (tx.category === cat) {
+          txCount++;
+          if (tx.amountCents < 0 && tx.category !== 'Transfer:CreditCardPayment') {
+            spendCents += Math.abs(tx.amountCents);
+          }
         }
       }
-    }
-    const ruleCount = rules.filter(r => r.category === cat).length;
-    return {
-      name: cat,
-      txCount,
-      spendCents,
-      ruleCount,
-    };
-  });
+      const ruleCount = rules.filter(r => r.category === cat).length;
+      return {
+        name: cat,
+        txCount,
+        spendCents,
+        ruleCount,
+      };
+    });
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
