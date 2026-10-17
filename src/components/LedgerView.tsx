@@ -71,8 +71,6 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
     transaction: null,
   });
 
-  const [analyticsGroupBy, setAnalyticsGroupBy] = useState<'year' | 'quarter' | 'month'>('year');
-
   const sortedCategoryOptions = useMemo(() => {
     return [...categories].sort((a, b) =>
       a.localeCompare(b, undefined, { sensitivity: 'base' })
@@ -94,92 +92,15 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
     return acc.maskedDisplay || tx.accountMasked;
   };
 
-  // Compute category totals and period pivot matrix (columns = periods, rows = categories)
-  const {
-    categoryTotals,
-    totalOutflow,
-    totalInflow,
-    analyticsPeriods,
-    analyticsCategories,
-    periodCategoryMatrix,
-    periodOutflowTotals,
-    categoryIsIncome,
-  } = useMemo(() => {
-    let outflow = 0;
-    let inflow = 0;
+  // Compute active categories for category filter dropdown
+  const categoryTotals = useMemo(() => {
     const totals: Record<string, number> = {};
-    const periodSet = new Set<string>();
-    const catOutflowByPeriod: Record<string, Record<string, number>> = {};
-    const catInflowByPeriod: Record<string, Record<string, number>> = {};
-    const catTotalOutflow: Record<string, number> = {};
-    const catTotalInflow: Record<string, number> = {};
-    const pOutflowTotals: Record<string, number> = {};
-
-    const getPeriodKey = (dateStr: string): string => {
-      if (!dateStr || dateStr.length < 7) return 'Unknown';
-      const year = dateStr.slice(0, 4);
-      if (analyticsGroupBy === 'year') {
-        return year;
-      }
-      if (analyticsGroupBy === 'quarter') {
-        const month = parseInt(dateStr.slice(5, 7), 10) || 1;
-        const q = Math.ceil(month / 3);
-        return `${year}-Q${q}`;
-      }
-      return dateStr.slice(0, 7);
-    };
-
     for (const tx of transactions) {
       if (tx.category === 'Transfer:CreditCardPayment') continue;
-      const period = getPeriodKey(tx.transactionDate);
-      periodSet.add(period);
-
-      if (tx.amountCents < 0) {
-        const absVal = Math.abs(tx.amountCents);
-        outflow += absVal;
-        totals[tx.category] = (totals[tx.category] || 0) + absVal;
-        catTotalOutflow[tx.category] = (catTotalOutflow[tx.category] || 0) + absVal;
-        if (!catOutflowByPeriod[tx.category]) catOutflowByPeriod[tx.category] = {};
-        catOutflowByPeriod[tx.category][period] =
-          (catOutflowByPeriod[tx.category][period] || 0) + absVal;
-        pOutflowTotals[period] = (pOutflowTotals[period] || 0) + absVal;
-      } else if (tx.amountCents > 0) {
-        inflow += tx.amountCents;
-        catTotalInflow[tx.category] = (catTotalInflow[tx.category] || 0) + tx.amountCents;
-        if (!catInflowByPeriod[tx.category]) catInflowByPeriod[tx.category] = {};
-        catInflowByPeriod[tx.category][period] =
-          (catInflowByPeriod[tx.category][period] || 0) + tx.amountCents;
-      }
+      totals[tx.category] = (totals[tx.category] || 0) + Math.abs(tx.amountCents);
     }
-
-    const sortedPeriods = Array.from(periodSet).sort((a, b) => a.localeCompare(b));
-    const allActiveCats = Array.from(
-      new Set([...Object.keys(catTotalOutflow), ...Object.keys(catTotalInflow)])
-    ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-
-    const matrix: Record<string, Record<string, number>> = {};
-    const isIncomeMap: Record<string, boolean> = {};
-
-    for (const cat of allActiveCats) {
-      const isInc = (catTotalInflow[cat] || 0) > (catTotalOutflow[cat] || 0) && (catTotalOutflow[cat] || 0) === 0;
-      isIncomeMap[cat] = isInc;
-      matrix[cat] = isInc ? catInflowByPeriod[cat] || {} : catOutflowByPeriod[cat] || {};
-      if (isInc && !totals[cat]) {
-        totals[cat] = catTotalInflow[cat] || 0;
-      }
-    }
-
-    return {
-      categoryTotals: totals,
-      totalOutflow: outflow,
-      totalInflow: inflow,
-      analyticsPeriods: sortedPeriods,
-      analyticsCategories: allActiveCats,
-      periodCategoryMatrix: matrix,
-      periodOutflowTotals: pOutflowTotals,
-      categoryIsIncome: isIncomeMap,
-    };
-  }, [transactions, analyticsGroupBy]);
+    return totals;
+  }, [transactions]);
 
   // Filter transactions
   const filtered = useMemo(() => {
@@ -308,179 +229,6 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Encrypted Ledger Analytics Pivot Matrix Card */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-3 border-b border-slate-800">
-          <div>
-            <h3 className="text-sm uppercase tracking-wider font-bold text-slate-100 flex items-center gap-2">
-              <span className="p-1 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
-                <Tag className="w-3.5 h-3.5" />
-              </span>
-              <span>Encrypted Ledger Analytics</span>
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Category spending matrix grouped by {analyticsGroupBy} (rows = categories, columns = {analyticsGroupBy}s).
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4">
-            {/* Group By Toggle: Year | Quarter | Month */}
-            <div className="inline-flex items-center rounded-lg bg-slate-950 p-1 border border-slate-800">
-              {(['year', 'quarter', 'month'] as const).map(mode => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setAnalyticsGroupBy(mode)}
-                  className={`px-3 py-1 rounded-md text-xs font-mono uppercase tracking-wider transition-colors ${
-                    analyticsGroupBy === mode
-                      ? 'bg-indigo-600 text-slate-100 font-semibold shadow-xs'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-4 text-xs font-mono">
-              <div className="flex items-center gap-1.5 text-slate-300">
-                <ArrowDownRight className="w-3.5 h-3.5 text-rose-400" />
-                <span>Total Outflow:</span>
-                <strong className="text-slate-100">
-                  ${(totalOutflow / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </strong>
-              </div>
-
-              <div className="flex items-center gap-1.5 text-slate-300">
-                <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Total Inflow:</span>
-                <strong className="text-emerald-400">
-                  +${(totalInflow / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </strong>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Pivot Matrix Table: Rows = Categories, Columns = Time Periods (Year / Quarter / Month) */}
-        {analyticsCategories.length === 0 || analyticsPeriods.length === 0 ? (
-          <div className="text-center py-6 text-xs text-slate-500 font-mono">
-            No categorized ledger transactions available for analytics.
-          </div>
-        ) : (
-          <div className="overflow-x-auto max-h-96">
-            <table className="w-full text-left border-collapse text-xs font-mono">
-              <thead className="sticky top-0 bg-slate-900 z-10">
-                <tr className="border-b border-slate-800 text-[11px] text-slate-400 uppercase tracking-wider">
-                  <th className="py-2.5 px-3 sticky left-0 bg-slate-900 z-20 min-w-[180px]">
-                    Category
-                  </th>
-                  {analyticsPeriods.map(period => (
-                    <th key={period} className="py-2.5 px-3 text-right whitespace-nowrap">
-                      {period}
-                    </th>
-                  ))}
-                  <th className="py-2.5 px-3 text-right whitespace-nowrap text-indigo-300 border-l border-slate-800">
-                    Total
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {analyticsCategories.map(cat => {
-                  const rowMap = periodCategoryMatrix[cat] || {};
-                  const rowTotal = categoryTotals[cat] || 0;
-                  const isInc = categoryIsIncome[cat];
-                  const isFilterSelected = selectedCategory === cat;
-
-                  return (
-                    <tr
-                      key={cat}
-                      onClick={() =>
-                        setSelectedCategory(prev => (prev === cat ? 'ALL' : cat))
-                      }
-                      className={`cursor-pointer transition-colors ${
-                        isFilterSelected
-                          ? 'bg-indigo-950/50 hover:bg-indigo-950/70'
-                          : 'hover:bg-slate-800/40'
-                      }`}
-                      title="Click row to filter ledger table below by this category"
-                    >
-                      <td className="py-2 px-3 font-sans font-medium text-slate-200 sticky left-0 bg-slate-900/95 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate">{cat}</span>
-                          {isInc && (
-                            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60">
-                              Inflow
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      {analyticsPeriods.map(period => {
-                        const val = rowMap[period] || 0;
-                        return (
-                          <td
-                            key={period}
-                            className={`py-2 px-3 text-right whitespace-nowrap ${
-                              val === 0
-                                ? 'text-slate-600'
-                                : isInc
-                                ? 'text-emerald-400'
-                                : 'text-slate-300'
-                            }`}
-                          >
-                            {val === 0
-                              ? '—'
-                              : `${isInc ? '+' : ''}$${(val / 100).toLocaleString('en-US', {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}`}
-                          </td>
-                        );
-                      })}
-                      <td
-                        className={`py-2 px-3 text-right whitespace-nowrap font-semibold border-l border-slate-800/80 ${
-                          isInc ? 'text-emerald-400' : 'text-indigo-300'
-                        }`}
-                      >
-                        {isInc ? '+' : ''}$
-                        {(rowTotal / 100).toLocaleString('en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot className="sticky bottom-0 bg-slate-950 border-t-2 border-slate-800 font-semibold text-slate-100">
-                <tr>
-                  <td className="py-2.5 px-3 sticky left-0 bg-slate-950 uppercase text-[11px] tracking-wider text-slate-400">
-                    Total Outflow
-                  </td>
-                  {analyticsPeriods.map(period => {
-                    const pTotal = periodOutflowTotals[period] || 0;
-                    return (
-                      <td key={period} className="py-2.5 px-3 text-right whitespace-nowrap text-slate-100">
-                        ${(pTotal / 100).toLocaleString('en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </td>
-                    );
-                  })}
-                  <td className="py-2.5 px-3 text-right whitespace-nowrap text-emerald-400 border-l border-slate-800">
-                    ${(totalOutflow / 100).toLocaleString('en-US', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-      </div>
-
       {/* Filter, Search, and Action Bar */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-4 border-b border-slate-800">

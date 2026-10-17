@@ -27,6 +27,7 @@ import { IngestionView } from './components/IngestionView';
 import { TelemetrySidebar } from './components/TelemetrySidebar';
 import { TriageInbox } from './components/TriageInbox';
 import { LedgerView } from './components/LedgerView';
+import { AnalyticsView } from './components/AnalyticsView';
 import { RulesList } from './components/RulesList';
 import { RuleModal } from './components/RuleModal';
 import { SecurityConsole } from './components/SecurityConsole';
@@ -37,10 +38,10 @@ import { AccountManagerView } from './components/AccountManagerView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { TransactionFormModal } from './components/TransactionFormModal';
 
-export type TabType = 'triage' | 'ledger' | 'rules' | 'ingest' | 'categories' | 'accounts' | 'security';
+export type TabType = 'analytics' | 'triage' | 'ledger' | 'rules' | 'ingest' | 'categories' | 'accounts' | 'security';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabType>('triage');
+  const [activeTab, setActiveTab] = useState<TabType>('analytics');
   const [passphrase, setPassphrase] = useState('local-airgap-vault-master-key-2026');
 
   // Ledger state
@@ -854,7 +855,17 @@ export default function App() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
           {/* Main Views Container (9 cols on lg/xl, 10 cols on 2xl) */}
           <div className="lg:col-span-9 xl:col-span-9 2xl:col-span-10 space-y-5 w-full min-w-0">
-            {/* Tab 1: Flagged Triage Inbox (View 1) */}
+            {/* Tab 1: Encrypted Ledger Analytics */}
+            {activeTab === 'analytics' && (
+              <ErrorBoundary fallbackTitle="Encrypted Ledger Analytics View Error">
+                <AnalyticsView
+                  transactions={transactions}
+                  accounts={accounts}
+                />
+              </ErrorBoundary>
+            )}
+
+            {/* Tab 2: Flagged Triage Inbox (View 1) */}
             {activeTab === 'triage' && (
               <ErrorBoundary fallbackTitle="Triage Inbox View Error">
                 <TriageInbox

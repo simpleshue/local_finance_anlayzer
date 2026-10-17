@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, ShieldAlert, Lock, Cpu, Database, UploadCloud, Tag, Building2 } from 'lucide-react';
+import { Shield, ShieldAlert, Lock, Cpu, Database, UploadCloud, Tag, Building2, BarChart3 } from 'lucide-react';
 
 interface HeaderProps {
   appName?: string;
@@ -59,7 +59,20 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Navigation Bar - All Views as Inline Tabs */}
       <div className="w-full px-3 sm:px-6 lg:px-8 flex overflow-x-auto border-t border-slate-800/80 scrollbar-none">
         <nav className="flex items-center space-x-2 py-2">
-          {/* Tab 1: Triage Inbox */}
+          {/* Tab 1: Encrypted Ledger Analytics */}
+          <button
+            onClick={() => onTabChange('analytics')}
+            className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 ${
+              activeTab === 'analytics'
+                ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Encrypted Ledger Analytics</span>
+          </button>
+
+          {/* Tab 2: Triage Inbox */}
           <button
             onClick={() => onTabChange('triage')}
             className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 ${
